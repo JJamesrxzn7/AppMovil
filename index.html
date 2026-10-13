@@ -19,6 +19,11 @@
   <!-- Leaflet CSS (Motor de mapa ultra-rápido y responsivo) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
+  <!-- PWA Manifest & Icons -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+
   <!-- Estilos Responsivos Mobile-First -->
   <link rel="stylesheet" href="css/style.css">
 
@@ -55,7 +60,11 @@
         </div>
       </div>
 
-      <div class="header-controls">
+        <!-- Badge de Cola Offline (Tolerancia a desconexión) -->
+        <div id="offline-badge" class="offline-badge hidden" title="Puntos de GPS guardados localmente mientras no hay internet">
+          <i class="fas fa-database"></i> <span id="offline-count">0</span>
+        </div>
+
         <!-- Indicador de latido 1000ms -->
         <div class="heartbeat-badge" id="heartbeat-badge" title="Ciclo de envío cada 1000ms">
           <span class="pulse-ring"></span>

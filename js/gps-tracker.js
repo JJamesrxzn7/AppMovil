@@ -30,15 +30,49 @@ class GPSTracker {
       pingsSent: 0
     };
 
+    // Cola de almacenamiento offline (Tolerancia a pérdida de internet)
+    this.offlineQueue = this.loadOfflineQueue();
+
     this.wakeLock = null;
     this.battery = null;
     this.callbacks = {
       onTelemetryUpdate: null,
       onTransmissionSuccess: null,
+      onOfflineQueueUpdate: null,
+      onOfflineSynced: null,
       onError: null
     };
 
     this.initSensors();
+  }
+
+  loadOfflineQueue() {
+    try {
+      const saved = localStorage.getItem('geolive_offline_queue');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  saveOfflineQueue() {
+    try {
+      // Limitar a los últimos 3000 puntos para optimizar almacenamiento en teléfono (~50 min de rastreo offline)
+      if (this.offlineQueue.length > 3000) {
+        this.offlineQueue = this.offlineQueue.slice(-3000);
+      }
+      localStorage.setItem('geolive_offline_queue', JSON.stringify(this.offlineQueue));
+    } catch (e) {
+      console.warn('Error guardando cola offline:', e);
+    }
+  }
+
+  queueOfflinePoint(payload) {
+    this.offlineQueue.push(payload);
+    this.saveOfflineQueue();
+    if (this.callbacks.onOfflineQueueUpdate) {
+      this.callbacks.onOfflineQueueUpdate(this.offlineQueue.length);
+    }
   }
 
   // Identificador único del dispositivo (móvil)
@@ -84,9 +118,19 @@ class GPSTracker {
       }, true);
     }
 
-    // 3. Sensor de Conexión de Red
-    window.addEventListener('online', () => { this.currentTelemetry.isOnline = true; });
-    window.addEventListener('offline', () => { this.currentTelemetry.isOnline = false; });
+    // 3. Sensor de Conexión de Red y Sincronización Automática
+    window.addEventListener('online', () => { 
+      this.currentTelemetry.isOnline = true;
+      console.log('📶 Conexión a internet restablecida. Vaciando cola offline...');
+      this.flushOfflineQueue();
+    });
+    window.addEventListener('offline', () => { 
+      this.currentTelemetry.isOnline = false;
+      console.warn('⚠️ Se perdió la conexión a internet. Guardando coordenadas en cola local...');
+      if (this.callbacks.onOfflineQueueUpdate) {
+        this.callbacks.onOfflineQueueUpdate(this.offlineQueue.length);
+      }
+    });
   }
 
   updateBatteryInfo() {
@@ -247,6 +291,16 @@ class GPSTracker {
       updateIntervalMs: this.updateIntervalMs
     };
 
+    // Si no hay conexión a internet, guardar de inmediato en la cola local para no perder el punto
+    if (!navigator.onLine) {
+      this.queueOfflinePoint(payload);
+      this.currentTelemetry.pingsSent++;
+      if (this.callbacks.onTransmissionSuccess) {
+        this.callbacks.onTransmissionSuccess(payload, this.currentTelemetry.pingsSent, false, true);
+      }
+      return;
+    }
+
     try {
       const db = window.FirebaseManager.getFirestoreDb();
       if (db) {
@@ -258,8 +312,7 @@ class GPSTracker {
         }, { merge: true });
 
         // 2. Guarda el punto en el historial para trazar la ruta en Google Maps
-        // Para optimizar lecturas/escrituras en Firestore, guardamos en la subcolección 'historial'
-        deviceRef.collection('historial').add({
+        await deviceRef.collection('historial').add({
           lat: payload.latitude,
           lng: payload.longitude,
           speedKmH: payload.speedKmH,
@@ -268,24 +321,85 @@ class GPSTracker {
           heading: payload.heading,
           timestamp: payload.timestamp,
           epoch: payload.updatedAtEpoch
-        }).catch(err => console.warn('Historial write error:', err));
+        });
 
         this.currentTelemetry.pingsSent++;
         if (this.callbacks.onTransmissionSuccess) {
-          this.callbacks.onTransmissionSuccess(payload, this.currentTelemetry.pingsSent);
+          this.callbacks.onTransmissionSuccess(payload, this.currentTelemetry.pingsSent, false, false);
+        }
+
+        // Si había puntos acumulados previamente mientras estuvo offline, sincronizarlos
+        if (this.offlineQueue.length > 0) {
+          this.flushOfflineQueue();
         }
       } else {
-        // Modo simulador local o Firestore no disponible
+        // Modo simulador local
         this.currentTelemetry.pingsSent++;
         if (this.callbacks.onTransmissionSuccess) {
-          this.callbacks.onTransmissionSuccess(payload, this.currentTelemetry.pingsSent, true);
+          this.callbacks.onTransmissionSuccess(payload, this.currentTelemetry.pingsSent, true, false);
         }
       }
     } catch (err) {
-      console.error('Error al transmitir a Firebase Firestore:', err);
-      if (this.callbacks.onError) {
-        this.callbacks.onError(err);
+      console.warn('Fallo de red al transmitir a Firebase. Guardando en cola offline:', err);
+      // Guardar en cola para no perder datos por micro-cortes de red
+      this.queueOfflinePoint(payload);
+      this.currentTelemetry.pingsSent++;
+      if (this.callbacks.onTransmissionSuccess) {
+        this.callbacks.onTransmissionSuccess(payload, this.currentTelemetry.pingsSent, false, true);
       }
+    }
+  }
+
+  // Sincroniza progresivamente todos los puntos acumulados cuando vuelve internet
+  async flushOfflineQueue() {
+    if (!navigator.onLine || this.offlineQueue.length === 0) return;
+
+    const db = window.FirebaseManager.getFirestoreDb();
+    if (!db) return;
+
+    const pointsToSync = [...this.offlineQueue];
+    const totalToSync = pointsToSync.length;
+    console.log(`[Offline Sync] Sincronizando ${totalToSync} puntos acumulados...`);
+
+    try {
+      const deviceRef = db.collection('dispositivos').doc(this.deviceId);
+
+      // Enviar en bloques (batches) de hasta 100 puntos
+      const batchSize = 100;
+      for (let i = 0; i < pointsToSync.length; i += batchSize) {
+        const batch = db.batch();
+        const chunk = pointsToSync.slice(i, i + batchSize);
+
+        chunk.forEach(pt => {
+          const docRef = deviceRef.collection('historial').doc();
+          batch.set(docRef, {
+            lat: pt.latitude,
+            lng: pt.longitude,
+            speedKmH: pt.speedKmH,
+            accuracy: pt.accuracy,
+            altitude: pt.altitude,
+            heading: pt.heading,
+            timestamp: pt.timestamp,
+            epoch: pt.updatedAtEpoch,
+            syncedFromOffline: true
+          });
+        });
+
+        await batch.commit();
+      }
+
+      // Vaciar cola una vez confirmada la subida
+      this.offlineQueue = [];
+      this.saveOfflineQueue();
+
+      if (this.callbacks.onOfflineSynced) {
+        this.callbacks.onOfflineSynced(totalToSync);
+      }
+      if (this.callbacks.onOfflineQueueUpdate) {
+        this.callbacks.onOfflineQueueUpdate(0);
+      }
+    } catch (syncErr) {
+      console.warn('[Offline Sync] Error al sincronizar cola con Firestore:', syncErr);
     }
   }
 

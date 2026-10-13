@@ -68,6 +68,48 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Sincronizar ID de dispositivo
   activeDeviceIdInput.value = tracker.deviceId;
 
+  // Registrar Service Worker para PWA y soporte offline total
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('[PWA] Service Worker activo:', reg.scope))
+      .catch(err => console.warn('[PWA] Service Worker no registrado:', err));
+  }
+
+  // Elementos de estado Offline
+  const offlineBadge = document.getElementById('offline-badge');
+  const offlineCount = document.getElementById('offline-count');
+
+  // Inicializar estado de cola offline si habían puntos pendientes
+  if (tracker.offlineQueue && tracker.offlineQueue.length > 0) {
+    offlineBadge.classList.remove('hidden');
+    offlineCount.textContent = `${tracker.offlineQueue.length}`;
+    showToast(`💾 Hay ${tracker.offlineQueue.length} puntos guardados en cola offline listos para sincronizar`, 'warning');
+  }
+
+  tracker.callbacks.onOfflineQueueUpdate = (count) => {
+    if (count > 0) {
+      offlineBadge.classList.remove('hidden');
+      offlineCount.textContent = `${count}`;
+      appStatusPill.className = 'status-indicator locating';
+      statusText.textContent = `Sin Red (${count} en cola)`;
+    } else {
+      offlineBadge.classList.add('hidden');
+      if (tracker.isTracking) {
+        appStatusPill.className = 'status-indicator online';
+        statusText.textContent = 'Transmitiendo (1000ms)';
+      }
+    }
+  };
+
+  tracker.callbacks.onOfflineSynced = (syncedCount) => {
+    showToast(`📶 Conexión restaurada: ¡${syncedCount} puntos guardados offline subidos a Firebase!`, 'success');
+    offlineBadge.classList.add('hidden');
+    if (tracker.isTracking) {
+      appStatusPill.className = 'status-indicator online';
+      statusText.textContent = 'Transmitiendo (1000ms)';
+    }
+  };
+
   // Inicializar Firebase
   const fbResult = window.FirebaseManager.initFirebase();
   if (fbResult.success) {
@@ -206,7 +248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     telemetryTimestamp.textContent = new Date().toLocaleTimeString();
 
-    // Actualizar mapa localmente de inmediato mientras se transmite
+    // Actualizar mapa localmente de inmediato mientras se transmite (incluso si no hay internet)
     if (!isTrackingRemote && telemetry.latitude && telemetry.longitude) {
       monitor.addPointToPath(telemetry.latitude, telemetry.longitude, true);
       monitor.updateMarkerPosition(
@@ -221,10 +263,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  tracker.callbacks.onTransmissionSuccess = (payload, pings) => {
+  tracker.callbacks.onTransmissionSuccess = (payload, pings, isSimulated, isOffline) => {
     quickPings.textContent = pings;
     heartbeatBadge.classList.add('flash');
     setTimeout(() => heartbeatBadge.classList.remove('flash'), 250);
+
+    if (isOffline) {
+      quickPings.style.color = '#f59e0b';
+      showToast('⚠️ Sin internet: Coordenada guardada en memoria local de tu teléfono', 'warning');
+    } else {
+      quickPings.style.color = '#ffffff';
+    }
 
     // Agregar fila a la tabla de historial
     appendTelemetryTableRow(payload);
