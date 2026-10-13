@@ -1,6 +1,6 @@
 /**
- * Controlador Principal de la Aplicación
- * Conecta UI, GPSTracker, MapMonitor y FirebaseManager
+ * Controlador Principal de la Aplicación Móvil
+ * Integra UX Mobile-First, GPSTracker, MapMonitor y Firebase Firestore
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -8,171 +8,225 @@ document.addEventListener('DOMContentLoaded', async () => {
   const tracker = new GPSTracker();
   const monitor = new MapMonitor('map');
 
-  // Elementos DOM - Tabs y Vistas
-  const tabEmitter = document.getElementById('tab-emitter');
-  const tabMonitor = document.getElementById('tab-monitor');
-  const viewEmitter = document.getElementById('view-emitter');
-  const viewMonitor = document.getElementById('view-monitor');
+  // Elementos DOM - Header y Estado
+  const appStatusPill = document.getElementById('app-status-pill');
+  const statusText = document.getElementById('status-text');
+  const heartbeatBadge = document.getElementById('heartbeat-badge');
 
-  // Elementos DOM - Emisor
-  const btnToggleTracking = document.getElementById('btn-toggle-tracking');
-  const emitterDeviceIdInput = document.getElementById('emitter-device-id');
-  const emitterStatusBadge = document.getElementById('emitter-status-badge');
-  const pingCounterEl = document.getElementById('ping-counter');
-  const emitterHeartbeat = document.getElementById('emitter-heartbeat');
-
-  // Telemetría Emisor
-  const emLat = document.getElementById('em-lat');
-  const emLng = document.getElementById('em-lng');
-  const emAcc = document.getElementById('em-acc');
-  const emSpeed = document.getElementById('em-speed');
-  const emAlt = document.getElementById('em-alt');
-  const emHeading = document.getElementById('em-heading');
-  const emBattery = document.getElementById('em-battery');
-  const emOrientation = document.getElementById('em-orientation');
-  const emLastUpdate = document.getElementById('em-last-update');
-
-  // Elementos DOM - Monitor
-  const monitorDeviceIdInput = document.getElementById('monitor-device-id');
-  const btnConnectMonitor = document.getElementById('btn-connect-monitor');
-  const monitorStatusBadge = document.getElementById('monitor-status-badge');
-  const btnAutoCenter = document.getElementById('btn-auto-center');
+  // Elementos DOM - Botones Flotantes (FABs)
+  const btnLocateMe = document.getElementById('btn-locate-me');
+  const btnToggleEngine = document.getElementById('btn-toggle-engine');
   const btnClearTrail = document.getElementById('btn-clear-trail');
-  const mapEngineSelect = document.getElementById('map-engine-select');
+  const btnToggleSim = document.getElementById('btn-toggle-sim');
 
-  // Telemetría Monitor
-  const monLat = document.getElementById('mon-lat');
-  const monLng = document.getElementById('mon-lng');
-  const monSpeed = document.getElementById('mon-speed');
-  const monHeading = document.getElementById('mon-heading');
-  const monAlt = document.getElementById('mon-alt');
-  const monAcc = document.getElementById('mon-acc');
-  const monDistance = document.getElementById('mon-distance');
-  const monBattery = document.getElementById('mon-battery');
-  const monLastSeen = document.getElementById('mon-last-seen');
+  // Elementos DOM - Bottom Sheet
+  const bottomSheet = document.getElementById('mobile-bottom-sheet');
+  const sheetHandle = document.getElementById('sheet-handle');
+  const sheetDragTitle = document.getElementById('sheet-drag-title');
+  const btnToggleTracking = document.getElementById('btn-toggle-tracking');
+
+  // Telemetría Rápida (Compacta)
+  const quickSpeed = document.getElementById('quick-speed');
+  const quickAccuracy = document.getElementById('quick-accuracy');
+  const quickBattery = document.getElementById('quick-battery');
+  const quickPings = document.getElementById('quick-pings');
+
+  // Telemetría Detallada (Expandida)
+  const detLat = document.getElementById('det-lat');
+  const detLng = document.getElementById('det-lng');
+  const detAltitude = document.getElementById('det-altitude');
+  const detHeading = document.getElementById('det-heading');
+  const detDistance = document.getElementById('det-distance');
+  const detOrientation = document.getElementById('det-orientation');
+  const telemetryTimestamp = document.getElementById('telemetry-timestamp');
   const telemetryTableBody = document.getElementById('telemetry-table-body');
 
-  // Simulación Demo
-  const btnToggleSim = document.getElementById('btn-toggle-sim');
-  let simInterval = null;
-  let isSimulating = false;
+  // Modo Selector (Local vs Remoto)
+  const modeBtnLocal = document.getElementById('mode-btn-local');
+  const modeBtnRemote = document.getElementById('mode-btn-remote');
+  const activeDeviceIdInput = document.getElementById('active-device-id');
+  const btnSaveDeviceId = document.getElementById('btn-save-device-id');
+  let isTrackingRemote = false;
 
-  // Modal de Configuración
+  // Modal de Ajustes
   const btnOpenSettings = document.getElementById('btn-open-settings');
   const btnCloseSettings = document.getElementById('btn-close-settings');
   const settingsModal = document.getElementById('settings-modal');
   const formSettings = document.getElementById('form-settings');
-  const inputApiKey = document.getElementById('cfg-api-key');
   const inputProjectId = document.getElementById('cfg-project-id');
+  const inputApiKey = document.getElementById('cfg-api-key');
   const inputGoogleMapsKey = document.getElementById('cfg-google-maps-key');
+  const selectEngine = document.getElementById('cfg-engine-select');
+
+  // Estado del simulador
+  let simInterval = null;
+  let isSimulating = false;
+
+  // -------------------------------------------------------------------------
+  // 1. INICIALIZACIÓN
+  // -------------------------------------------------------------------------
+  // Sincronizar ID de dispositivo
+  activeDeviceIdInput.value = tracker.deviceId;
 
   // Inicializar Firebase
-  const fbInitResult = window.FirebaseManager.initFirebase();
-  if (fbInitResult.success) {
-    showToast('Firebase Firestore conectado (Proyecto: appmovil-67ee7)', 'success');
-  } else {
-    showToast('Advertencia: Revisa la configuración de Firebase en Ajustes', 'warning');
+  const fbResult = window.FirebaseManager.initFirebase();
+  if (fbResult.success) {
+    showToast('Firebase conectado (appmovil-67ee7)', 'success');
   }
 
-  // Inicializar ID de Dispositivo en inputs
-  emitterDeviceIdInput.value = tracker.deviceId;
-  monitorDeviceIdInput.value = tracker.deviceId;
-
-  // Inicializar Mapa
+  // Inicializar Mapa y Localizar al Usuario Inmediatamente
   await monitor.initMap();
-  monitor.startRealtimeListener(tracker.deviceId);
 
-  // Sincronizar selector de motor de mapa
-  mapEngineSelect.value = monitor.engine;
-
-  // -------------------------------------------------------------------------
-  // Manejadores de Pestañas (Modo Emisor vs Modo Monitor)
-  // -------------------------------------------------------------------------
-  tabEmitter.addEventListener('click', () => {
-    tabEmitter.classList.add('active');
-    tabMonitor.classList.remove('active');
-    viewEmitter.classList.remove('hidden');
-    viewMonitor.classList.add('hidden');
-  });
-
-  tabMonitor.addEventListener('click', () => {
-    tabMonitor.classList.add('active');
-    tabEmitter.classList.remove('active');
-    viewMonitor.classList.remove('hidden');
-    viewEmitter.classList.add('hidden');
-    // Asegurar redimensionamiento correcto del mapa
-    setTimeout(() => {
-      if (monitor.map && monitor.engine === 'leaflet') {
-        monitor.map.invalidateSize();
-      }
-    }, 200);
-  });
-
-  // Cambio de ID de Dispositivo en Emisor
-  emitterDeviceIdInput.addEventListener('change', () => {
-    tracker.setDeviceId(emitterDeviceIdInput.value);
-    monitorDeviceIdInput.value = tracker.deviceId;
-    showToast(`ID de dispositivo emisor actualizado: ${tracker.deviceId}`, 'info');
-  });
+  // Escuchar cuando se detecte la ubicación del usuario
+  monitor.callbacks.onUserLocated = (coords) => {
+    appStatusPill.className = 'status-indicator online';
+    statusText.textContent = `Ubicación lista (±${Math.round(coords.accuracy)}m)`;
+    quickAccuracy.textContent = `±${Math.round(coords.accuracy)}m`;
+    detLat.textContent = coords.latitude.toFixed(6);
+    detLng.textContent = coords.longitude.toFixed(6);
+    showToast('📍 ¡Ubicación GPS actual detectada en el mapa!', 'success');
+  };
 
   // -------------------------------------------------------------------------
-  // Control de Transmisión GPS (1000 ms)
+  // 2. BOTONES FLOTANTES DE ACCIÓN RÁPIDA (FABs)
+  // -------------------------------------------------------------------------
+  // Centrar en Mi Ubicación
+  btnLocateMe.addEventListener('click', () => {
+    monitor.centerOnUser();
+    showToast('Centrado en tu ubicación GPS', 'info');
+  });
+
+  // Alternar Motor de Mapa (Google Maps <-> OpenStreetMap Leaflet)
+  btnToggleEngine.addEventListener('click', async () => {
+    const nextEngine = monitor.engine === 'leaflet' ? 'google' : 'leaflet';
+    if (nextEngine === 'google' && !monitor.googleMapsApiKey) {
+      showToast('Ingresa tu clave de Google Maps en Ajustes (⚙️)', 'warning');
+      openSettings();
+      return;
+    }
+    await monitor.setEngine(nextEngine);
+    showToast(`Mapa cambiado a: ${nextEngine === 'google' ? 'Google Maps API v3' : 'OpenStreetMap'}`, 'info');
+  });
+
+  // Limpiar Rastro
+  btnClearTrail.addEventListener('click', () => {
+    monitor.clearPath();
+    detDistance.textContent = '0 m';
+    telemetryTableBody.innerHTML = '';
+    showToast('Rastro de ruta limpiado', 'info');
+  });
+
+  // Simulador de Movimiento GPS
+  btnToggleSim.addEventListener('click', () => {
+    if (!isSimulating) {
+      startSimulator();
+    } else {
+      stopSimulator();
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 3. CONTROL DEL BOTTOM SHEET (DESPLIEGUE ERGONÓMICO)
+  // -------------------------------------------------------------------------
+  sheetHandle.addEventListener('click', () => {
+    toggleBottomSheet();
+  });
+
+  function toggleBottomSheet() {
+    const isCollapsed = bottomSheet.classList.contains('collapsed');
+    if (isCollapsed) {
+      bottomSheet.classList.remove('collapsed');
+      bottomSheet.classList.add('expanded');
+      sheetDragTitle.innerHTML = '<i class="fas fa-chevron-down"></i> Toca para minimizar';
+    } else {
+      bottomSheet.classList.remove('expanded');
+      bottomSheet.classList.add('collapsed');
+      sheetDragTitle.innerHTML = '<i class="fas fa-chevron-up"></i> Toca para ver telemetría completa';
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 4. INICIAR / DETENER TRANSMISIÓN GPS (1000 ms)
   // -------------------------------------------------------------------------
   btnToggleTracking.addEventListener('click', async () => {
     if (!tracker.isTracking) {
       btnToggleTracking.disabled = true;
-      btnToggleTracking.innerHTML = '<span class="spinner"></span> Iniciando Sensores...';
-      
-      const started = await tracker.startTracking();
+      btnToggleTracking.innerHTML = '<span class="spinner"></span> Activando GPS...';
+
+      const ok = await tracker.startTracking();
       btnToggleTracking.disabled = false;
 
-      if (started) {
+      if (ok) {
+        btnToggleTracking.classList.add('active-transmitting');
         btnToggleTracking.innerHTML = '<i class="fas fa-stop-circle"></i> Detener Transmisión GPS';
-        btnToggleTracking.classList.remove('btn-primary');
-        btnToggleTracking.classList.add('btn-danger');
-        emitterStatusBadge.className = 'badge badge-success';
-        emitterStatusBadge.textContent = '● Transmitiendo (1000ms)';
-        emitterHeartbeat.classList.add('pulse-active');
-        showToast('Transmisión GPS activada. Enviando a Firebase cada 1000ms', 'success');
+        appStatusPill.className = 'status-indicator online';
+        statusText.textContent = 'Transmitiendo (1000ms)';
+        heartbeatBadge.classList.add('active');
+        showToast('📡 Transmisión iniciada: Enviando a Firestore cada 1000ms', 'success');
+
+        // Escuchar también en tiempo real en el mapa si no es remoto
+        if (!isTrackingRemote) {
+          monitor.startRealtimeListener(tracker.deviceId);
+        }
       } else {
         btnToggleTracking.innerHTML = '<i class="fas fa-satellite-dish"></i> Iniciar Transmisión GPS (1000ms)';
       }
     } else {
       tracker.stopTracking();
+      btnToggleTracking.classList.remove('active-transmitting');
       btnToggleTracking.innerHTML = '<i class="fas fa-satellite-dish"></i> Iniciar Transmisión GPS (1000ms)';
-      btnToggleTracking.classList.remove('btn-danger');
-      btnToggleTracking.classList.add('btn-primary');
-      emitterStatusBadge.className = 'badge badge-offline';
-      emitterStatusBadge.textContent = '○ Detenido';
-      emitterHeartbeat.classList.remove('pulse-active');
-      showToast('Transmisión detenida.', 'info');
+      appStatusPill.className = 'status-indicator';
+      statusText.textContent = 'Transmisión Detenida';
+      heartbeatBadge.classList.remove('active');
+      showToast('Transmisión GPS detenida', 'info');
     }
   });
 
-  // Callbacks del Tracker (Emisor)
+  // Callbacks del Tracker de Sensores (Local)
   tracker.callbacks.onTelemetryUpdate = (telemetry) => {
-    if (telemetry.latitude !== null) emLat.textContent = telemetry.latitude.toFixed(6);
-    if (telemetry.longitude !== null) emLng.textContent = telemetry.longitude.toFixed(6);
-    emAcc.textContent = telemetry.accuracy !== null ? `±${telemetry.accuracy} m` : '--';
-    emSpeed.textContent = `${telemetry.speedKmH} km/h`;
-    emAlt.textContent = telemetry.altitude !== null ? `${telemetry.altitude} m` : 'N/D';
-    emHeading.textContent = telemetry.heading !== null ? `${telemetry.heading}° (${formatHeadingToCardinal(telemetry.heading)})` : 'N/D';
-    
+    // Actualizar vista rápida
+    quickSpeed.textContent = `${telemetry.speedKmH} km/h`;
+    quickAccuracy.textContent = telemetry.accuracy ? `±${telemetry.accuracy}m` : '--';
     if (telemetry.batteryLevel !== null) {
-      emBattery.textContent = `${telemetry.batteryLevel}% ${telemetry.batteryCharging ? '⚡ (Cargando)' : ''}`;
-    }
-    
-    if (telemetry.orientation && telemetry.orientation.alpha !== null) {
-      emOrientation.textContent = `α:${telemetry.orientation.alpha}° β:${telemetry.orientation.beta}° γ:${telemetry.orientation.gamma}°`;
+      quickBattery.textContent = `${telemetry.batteryLevel}%`;
     }
 
-    emLastUpdate.textContent = new Date().toLocaleTimeString();
+    // Actualizar vista detallada
+    if (telemetry.latitude !== null) detLat.textContent = telemetry.latitude.toFixed(6);
+    if (telemetry.longitude !== null) detLng.textContent = telemetry.longitude.toFixed(6);
+    detAltitude.textContent = telemetry.altitude !== null ? `${telemetry.altitude} m` : 'N/D';
+    detHeading.textContent = telemetry.heading !== null 
+      ? `${telemetry.heading}° (${formatHeadingToCardinal(telemetry.heading)})` 
+      : 'N/D';
+
+    if (telemetry.orientation && telemetry.orientation.alpha !== null) {
+      detOrientation.textContent = `α:${telemetry.orientation.alpha}° β:${telemetry.orientation.beta}° γ:${telemetry.orientation.gamma}°`;
+    }
+
+    telemetryTimestamp.textContent = new Date().toLocaleTimeString();
+
+    // Actualizar mapa localmente de inmediato mientras se transmite
+    if (!isTrackingRemote && telemetry.latitude && telemetry.longitude) {
+      monitor.addPointToPath(telemetry.latitude, telemetry.longitude, true);
+      monitor.updateMarkerPosition(
+        telemetry.latitude, 
+        telemetry.longitude, 
+        telemetry.heading || 0, 
+        telemetry.accuracy || 15
+      );
+      if (monitor.autoCenter) {
+        monitor.panToLocation(telemetry.latitude, telemetry.longitude);
+      }
+    }
   };
 
-  tracker.callbacks.onTransmissionSuccess = (payload, pings, isSimulated) => {
-    pingCounterEl.textContent = pings;
-    emitterHeartbeat.classList.add('flash-ping');
-    setTimeout(() => emitterHeartbeat.classList.remove('flash-ping'), 250);
+  tracker.callbacks.onTransmissionSuccess = (payload, pings) => {
+    quickPings.textContent = pings;
+    heartbeatBadge.classList.add('flash');
+    setTimeout(() => heartbeatBadge.classList.remove('flash'), 250);
+
+    // Agregar fila a la tabla de historial
+    appendTelemetryTableRow(payload);
   };
 
   tracker.callbacks.onError = (err) => {
@@ -180,203 +234,153 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   // -------------------------------------------------------------------------
-  // Control del Monitor en Tiempo Real (Receptor / Mapa)
+  // 5. CALLBACk DEL MAPA Y MODO REMOTO
   // -------------------------------------------------------------------------
-  btnConnectMonitor.addEventListener('click', () => {
-    const idToTrack = monitorDeviceIdInput.value.trim();
-    if (idToTrack) {
-      monitor.clearPath();
-      monitor.startRealtimeListener(idToTrack);
-      monitorStatusBadge.className = 'badge badge-success';
-      monitorStatusBadge.textContent = `● Conectado a ${idToTrack}`;
-      showToast(`Escuchando en tiempo real: ${idToTrack}`, 'success');
-    }
-  });
-
-  btnAutoCenter.addEventListener('click', () => {
-    monitor.autoCenter = !monitor.autoCenter;
-    btnAutoCenter.classList.toggle('active', monitor.autoCenter);
-    showToast(monitor.autoCenter ? 'Auto-centrado activado' : 'Auto-centrado desactivado', 'info');
-  });
-
-  btnClearTrail.addEventListener('click', () => {
-    monitor.clearPath();
-    monDistance.textContent = '0 m';
-    telemetryTableBody.innerHTML = '';
-    showToast('Rastro del mapa limpiado', 'info');
-  });
-
-  mapEngineSelect.addEventListener('change', async () => {
-    const selectedEngine = mapEngineSelect.value;
-    if (selectedEngine === 'google' && !monitor.googleMapsApiKey) {
-      showToast('Para usar Google Maps API, debes ingresar tu Google Maps Key en Ajustes', 'warning');
-      openSettingsModal();
-      return;
-    }
-    await monitor.setEngine(selectedEngine);
-    showToast(`Motor de mapa cambiado a: ${selectedEngine.toUpperCase()}`, 'info');
-  });
-
-  // Callback del Monitor (Receptor)
   monitor.callbacks.onTelemetryReceived = (data) => {
-    monLat.textContent = data.latitude ? data.latitude.toFixed(6) : '--';
-    monLng.textContent = data.longitude ? data.longitude.toFixed(6) : '--';
-    monSpeed.textContent = `${data.speedKmH || 0} km/h`;
-    monHeading.textContent = data.heading !== null && data.heading !== undefined ? `${data.heading}° (${formatHeadingToCardinal(data.heading)})` : '--';
-    monAlt.textContent = data.altitude !== null && data.altitude !== undefined ? `${data.altitude} m` : '--';
-    monAcc.textContent = data.accuracy ? `±${data.accuracy} m` : '--';
-    monDistance.textContent = data.totalDistanceMeters > 1000 
-      ? `${(data.totalDistanceMeters / 1000).toFixed(2)} km` 
-      : `${data.totalDistanceMeters} m`;
-    monBattery.textContent = data.batteryLevel !== null && data.batteryLevel !== undefined ? `${data.batteryLevel}%` : 'N/D';
-    monLastSeen.textContent = new Date(data.updatedAtEpoch || Date.now()).toLocaleTimeString();
-
-    // Agregar fila a la tabla de telemetría en tiempo real
-    prependTelemetryRow(data);
+    if (isTrackingRemote) {
+      quickSpeed.textContent = `${data.speedKmH || 0} km/h`;
+      quickAccuracy.textContent = data.accuracy ? `±${data.accuracy}m` : '--';
+      if (data.batteryLevel !== null && data.batteryLevel !== undefined) {
+        quickBattery.textContent = `${data.batteryLevel}%`;
+      }
+      detLat.textContent = data.latitude ? data.latitude.toFixed(6) : '--';
+      detLng.textContent = data.longitude ? data.longitude.toFixed(6) : '--';
+      detAltitude.textContent = data.altitude ? `${data.altitude} m` : '--';
+      detHeading.textContent = data.heading !== undefined ? `${data.heading}°` : '--';
+      detDistance.textContent = data.totalDistanceMeters > 1000 
+        ? `${(data.totalDistanceMeters / 1000).toFixed(2)} km` 
+        : `${data.totalDistanceMeters} m`;
+      telemetryTimestamp.textContent = new Date().toLocaleTimeString();
+      appendTelemetryTableRow(data);
+    }
   };
 
-  function prependTelemetryRow(data) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${new Date().toLocaleTimeString()}</td>
-      <td>${data.latitude.toFixed(5)}, ${data.longitude.toFixed(5)}</td>
-      <td><span class="speed-pill">${data.speedKmH || 0} km/h</span></td>
-      <td>±${data.accuracy || '--'}m</td>
-      <td>${data.batteryLevel !== null && data.batteryLevel !== undefined ? data.batteryLevel + '%' : '--'}</td>
-    `;
-    telemetryTableBody.insertBefore(tr, telemetryTableBody.firstChild);
-    // Mantener máximo 20 filas en tabla para alto rendimiento
-    if (telemetryTableBody.children.length > 20) {
-      telemetryTableBody.removeChild(telemetryTableBody.lastChild);
-    }
-  }
+  // Cambio de Modo (Local vs Remoto)
+  modeBtnLocal.addEventListener('click', () => {
+    isTrackingRemote = false;
+    modeBtnLocal.classList.add('active');
+    modeBtnRemote.classList.remove('active');
+    monitor.clearPath();
+    monitor.locateUserImmediately();
+    showToast('Modo: Mi Celular (Transmitir)', 'info');
+  });
 
-  // -------------------------------------------------------------------------
-  // Simulador GPS en Tiempo Real (Para pruebas sin salir a la calle)
-  // -------------------------------------------------------------------------
-  btnToggleSim.addEventListener('click', () => {
-    if (!isSimulating) {
-      startSimulation();
-    } else {
-      stopSimulation();
+  modeBtnRemote.addEventListener('click', () => {
+    isTrackingRemote = true;
+    modeBtnRemote.classList.add('active');
+    modeBtnLocal.classList.remove('active');
+    const targetId = activeDeviceIdInput.value.trim();
+    monitor.clearPath();
+    monitor.startRealtimeListener(targetId);
+    showToast(`Modo: Monitoreando a ${targetId}`, 'info');
+  });
+
+  btnSaveDeviceId.addEventListener('click', () => {
+    const newId = activeDeviceIdInput.value.trim();
+    if (newId) {
+      tracker.setDeviceId(newId);
+      if (isTrackingRemote) {
+        monitor.startRealtimeListener(newId);
+      }
+      showToast(`ID de dispositivo: ${newId}`, 'success');
     }
   });
 
-  function startSimulation() {
+  // -------------------------------------------------------------------------
+  // 6. SIMULADOR GPS EN TIEMPO REAL
+  // -------------------------------------------------------------------------
+  function startSimulator() {
     isSimulating = true;
-    btnToggleSim.innerHTML = '<i class="fas fa-pause"></i> Detener Simulación';
-    btnToggleSim.classList.add('btn-warning');
-    showToast('Simulador GPS iniciado. Generando movimiento cada 1000ms', 'info');
+    btnToggleSim.classList.remove('fab-warning');
+    btnToggleSim.classList.add('fab-primary');
+    showToast('Simulador activado: Generando trayectoria cada 1000ms', 'info');
 
-    let simLat = 4.7110;
-    let simLng = -74.0721;
-    let heading = 45;
-    let speed = 15; // km/h
+    // Posición inicial (del usuario si existe, o Bogotá)
+    let lat = monitor.currentUserLocation ? monitor.currentUserLocation.lat : 4.7110;
+    let lng = monitor.currentUserLocation ? monitor.currentUserLocation.lng : -74.0721;
+    let heading = 60;
+    let speed = 25;
 
     simInterval = setInterval(() => {
-      // Movimiento simulado suave
-      const step = 0.00015;
-      heading = (heading + (Math.random() * 20 - 10)) % 360;
+      heading = (heading + (Math.random() * 16 - 8)) % 360;
       const rad = (heading * Math.PI) / 180;
-      simLat += Math.cos(rad) * step;
-      simLng += Math.sin(rad) * step;
-      speed = Math.max(5, Math.min(60, speed + (Math.random() * 4 - 2)));
+      lat += Math.cos(rad) * 0.00015;
+      lng += Math.sin(rad) * 0.00015;
+      speed = Math.max(10, Math.min(80, speed + (Math.random() * 6 - 3)));
 
-      const simData = {
+      const simPoint = {
         deviceId: tracker.deviceId,
-        latitude: simLat,
-        longitude: simLng,
-        accuracy: Math.floor(3 + Math.random() * 5),
-        altitude: 2600 + Math.floor(Math.random() * 5),
+        latitude: lat,
+        longitude: lng,
+        accuracy: 4,
+        altitude: 2600,
         speed: speed / 3.6,
         speedKmH: parseFloat(speed.toFixed(1)),
         heading: Math.round(heading),
-        batteryLevel: 88,
+        batteryLevel: 92,
         batteryCharging: false,
-        orientation: { alpha: Math.round(heading), beta: 12, gamma: -3 },
+        orientation: { alpha: Math.round(heading), beta: 5, gamma: 2 },
         isOnline: true,
         timestamp: new Date().toISOString(),
         updatedAtEpoch: Date.now(),
         updateIntervalMs: 1000
       };
 
-      // Si Firestore está listo, enviarlo
+      // Si está en Firebase, guardar
       const db = window.FirebaseManager.getFirestoreDb();
       if (db) {
-        db.collection('dispositivos').doc(tracker.deviceId).set(simData, { merge: true });
+        db.collection('dispositivos').doc(tracker.deviceId).set(simPoint, { merge: true });
         db.collection('dispositivos').doc(tracker.deviceId).collection('historial').add({
-          lat: simLat,
-          lng: simLng,
-          speedKmH: simData.speedKmH,
-          timestamp: simData.timestamp,
-          epoch: simData.updatedAtEpoch
+          lat, lng, speedKmH: simPoint.speedKmH, epoch: simPoint.updatedAtEpoch
         }).catch(() => {});
       } else {
-        // Enviar directo al monitor
-        monitor.handleRealtimeData(simData);
+        monitor.handleRealtimeData(simPoint);
       }
 
       tracker.handleGeoSuccess({
         coords: {
-          latitude: simLat,
-          longitude: simLng,
-          accuracy: simData.accuracy,
-          altitude: simData.altitude,
+          latitude: lat,
+          longitude: lng,
+          accuracy: 4,
+          altitude: 2600,
           altitudeAccuracy: 3,
-          speed: simData.speed,
-          heading: simData.heading
+          speed: simPoint.speed,
+          heading: simPoint.heading
         },
-        timestamp: simData.updatedAtEpoch
+        timestamp: simPoint.updatedAtEpoch
       });
+
+      tracker.callbacks.onTransmissionSuccess(simPoint, ++tracker.currentTelemetry.pingsSent);
 
     }, 1000);
   }
 
-  function stopSimulation() {
+  function stopSimulator() {
     isSimulating = false;
     if (simInterval) clearInterval(simInterval);
-    btnToggleSim.innerHTML = '<i class="fas fa-play"></i> Simular Movimiento GPS';
-    btnToggleSim.classList.remove('btn-warning');
-    showToast('Simulación detenida', 'info');
+    btnToggleSim.classList.add('fab-warning');
+    btnToggleSim.classList.remove('fab-primary');
+    showToast('Simulador detenido', 'info');
   }
 
   // -------------------------------------------------------------------------
-  // Modal de Configuración
+  // 7. TABLA DE TELEMETRÍA Y HELPERS
   // -------------------------------------------------------------------------
-  btnOpenSettings.addEventListener('click', openSettingsModal);
-  btnCloseSettings.addEventListener('click', closeSettingsModal);
-
-  function openSettingsModal() {
-    const curCfg = window.FirebaseManager.getActiveFirebaseConfig();
-    inputApiKey.value = curCfg.apiKey;
-    inputProjectId.value = curCfg.projectId;
-    inputGoogleMapsKey.value = monitor.googleMapsApiKey;
-    settingsModal.classList.remove('hidden');
-  }
-
-  function closeSettingsModal() {
-    settingsModal.classList.add('hidden');
-  }
-
-  formSettings.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const updatedFb = {
-      apiKey: inputApiKey.value,
-      projectId: inputProjectId.value
-    };
-    window.FirebaseManager.saveFirebaseConfig(updatedFb);
-
-    const gKey = inputGoogleMapsKey.value.trim();
-    if (gKey) {
-      await monitor.setEngine('google', gKey);
-      mapEngineSelect.value = 'google';
+  function appendTelemetryTableRow(data) {
+    if (!telemetryTableBody) return;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${new Date().toLocaleTimeString()}</td>
+      <td>${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}</td>
+      <td><strong style="color: #00f2fe;">${data.speedKmH || 0} km/h</strong></td>
+      <td>±${data.accuracy || '--'}m</td>
+    `;
+    telemetryTableBody.insertBefore(tr, telemetryTableBody.firstChild);
+    if (telemetryTableBody.children.length > 20) {
+      telemetryTableBody.removeChild(telemetryTableBody.lastChild);
     }
+  }
 
-    closeSettingsModal();
-    showToast('Configuraciones guardadas y aplicadas', 'success');
-  });
-
-  // Helpers
   function formatHeadingToCardinal(deg) {
     if (deg === null || deg === undefined) return '--';
     const directions = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -384,16 +388,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     return directions[idx];
   }
 
+  // Modal de Ajustes
+  btnOpenSettings.addEventListener('click', openSettings);
+  btnCloseSettings.addEventListener('click', closeSettings);
+
+  function openSettings() {
+    const curCfg = window.FirebaseManager.getActiveFirebaseConfig();
+    inputProjectId.value = curCfg.projectId;
+    inputApiKey.value = curCfg.apiKey;
+    inputGoogleMapsKey.value = monitor.googleMapsApiKey;
+    selectEngine.value = monitor.engine;
+    settingsModal.classList.remove('hidden');
+  }
+
+  function closeSettings() {
+    settingsModal.classList.add('hidden');
+  }
+
+  formSettings.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    window.FirebaseManager.saveFirebaseConfig({
+      projectId: inputProjectId.value,
+      apiKey: inputApiKey.value
+    });
+
+    const gKey = inputGoogleMapsKey.value.trim();
+    const newEngine = selectEngine.value;
+    await monitor.setEngine(newEngine, gKey);
+
+    closeSettings();
+    showToast('Ajustes guardados correctamente', 'success');
+  });
+
   function showToast(msg, type = 'info') {
-    const toastContainer = document.getElementById('toast-container');
-    if (!toastContainer) return;
+    const container = document.getElementById('toast-container');
+    if (!container) return;
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `<span>${msg}</span>`;
-    toastContainer.appendChild(toast);
+    container.appendChild(toast);
     setTimeout(() => {
       toast.classList.add('fade-out');
-      setTimeout(() => toast.remove(), 400);
-    }, 3500);
+      setTimeout(() => toast.remove(), 350);
+    }, 3200);
   }
 });

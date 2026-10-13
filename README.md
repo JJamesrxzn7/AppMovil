@@ -115,3 +115,4 @@ service cloud.firestore {
 
 ## 🧑‍💻 Auditoría Técnica con OpenCode
 El proyecto incluye la suite de auditoría técnica realizada mediante el agente **OpenCode**, documentada íntegramente en [`AUDITORIA_OPENCODE.md`](file:///c:/Users/estudiante/Desktop/DesarrolloDePlataformas/AUDITORIA_OPENCODE.md).
+

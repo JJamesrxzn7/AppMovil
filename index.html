@@ -2,24 +2,24 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0b0f19">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>GPS Realtime Tracker | Firebase Firestore & Google Maps</title>
+  <title>GeoLive | Rastreo GPS Móvil en Tiempo Real</title>
 
   <!-- Google Fonts: Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  <!-- Leaflet CSS (Motor de mapa de respaldo / alternativo instantáneo) -->
+  <!-- Leaflet CSS (Motor de mapa ultra-rápido y responsivo) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-  <!-- Estilos Personalizados -->
+  <!-- Estilos Responsivos Mobile-First -->
   <link rel="stylesheet" href="css/style.css">
 
   <!-- Firebase SDK Compat v10 (DaaS - Database as a Service) -->
@@ -29,267 +29,213 @@
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
-<body>
+<body class="mobile-app-body">
 
-  <!-- Barra Superior -->
-  <header class="app-header">
-    <div class="brand">
-      <div class="brand-icon">
-        <i class="fas fa-satellite"></i>
+  <!-- ======================================================== -->
+  <!-- 1. MAPA EN PANTALLA COMPLETA (Base de la App Móvil)      -->
+  <!-- ======================================================== -->
+  <div id="map-fullscreen-wrapper">
+    <div id="map"></div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 2. BARRA SUPERIOR FLOTANTE (Header Móvil)               -->
+  <!-- ======================================================== -->
+  <header class="floating-header">
+    <div class="header-capsule">
+      <div class="brand-pill">
+        <div class="brand-badge-icon">
+          <i class="fas fa-satellite"></i>
+        </div>
+        <div class="brand-info">
+          <h2>GeoLive</h2>
+          <span id="app-status-pill" class="status-indicator">
+            <span class="status-dot"></span> <span id="status-text">Localizando GPS...</span>
+          </span>
+        </div>
       </div>
-      <div class="brand-text">
-        <h1>GeoLive Telemetry</h1>
-        <p>Firebase DaaS (appmovil-67ee7) & Google Maps API</p>
+
+      <div class="header-controls">
+        <!-- Indicador de latido 1000ms -->
+        <div class="heartbeat-badge" id="heartbeat-badge" title="Ciclo de envío cada 1000ms">
+          <span class="pulse-ring"></span>
+          <span class="heartbeat-core"></span>
+          <span class="heartbeat-label">1000ms</span>
+        </div>
+
+        <button id="btn-open-settings" class="mobile-icon-btn" aria-label="Ajustes" title="Ajustes de Firebase y Google Maps">
+          <i class="fas fa-cog"></i>
+        </button>
       </div>
-    </div>
-    <div class="header-actions">
-      <a href="https://console.firebase.google.com/project/appmovil-67ee7/overview?hl=es-419" 
-         target="_blank" 
-         rel="noopener noreferrer" 
-         class="btn btn-secondary btn-icon" 
-         title="Abrir Consola de Firebase">
-        <i class="fas fa-fire" style="color: #f59e0b;"></i>
-      </a>
-      <button id="btn-open-settings" class="btn btn-secondary btn-icon" title="Ajustes de API">
-        <i class="fas fa-cog"></i>
-      </button>
     </div>
   </header>
 
-  <!-- Navegación por Modos (Emisor vs Monitor) -->
-  <nav class="tab-navigation">
-    <div class="tab-nav-container">
-      <button id="tab-emitter" class="tab-btn active">
-        <i class="fas fa-mobile-alt"></i> Modo Emisor (Celular)
-      </button>
-      <button id="tab-monitor" class="tab-btn">
-        <i class="fas fa-map-marked-alt"></i> Modo Monitor (Mapa en Vivo)
-      </button>
+  <!-- ======================================================== -->
+  <!-- 3. BOTONES DE ACCIÓN RÁPIDA FLOTANTES (Costado Derecho)  -->
+  <!-- ======================================================== -->
+  <div class="floating-fab-column">
+    <!-- Botón directo: Centrar en Mi Ubicación Actual -->
+    <button id="btn-locate-me" class="fab-btn fab-primary" aria-label="Mi Ubicación" title="Centrar en mi ubicación actual">
+      <i class="fas fa-crosshairs"></i>
+      <span class="fab-tooltip">Mi Ubicación</span>
+    </button>
+
+    <!-- Alternar Motor de Mapa (Google Maps / Leaflet) -->
+    <button id="btn-toggle-engine" class="fab-btn fab-secondary" aria-label="Cambiar Mapa" title="Alternar entre Google Maps y OpenStreetMap">
+      <i class="fas fa-layer-group"></i>
+      <span class="fab-tooltip">Cambiar Mapa</span>
+    </button>
+
+    <!-- Limpiar rastro de ruta -->
+    <button id="btn-clear-trail" class="fab-btn fab-secondary" aria-label="Limpiar Rastro" title="Limpiar trazado de ruta">
+      <i class="fas fa-eraser"></i>
+      <span class="fab-tooltip">Limpiar Rastro</span>
+    </button>
+
+    <!-- Simulador de Pruebas -->
+    <button id="btn-toggle-sim" class="fab-btn fab-warning" aria-label="Simulador GPS" title="Simular movimiento GPS">
+      <i class="fas fa-flask"></i>
+      <span class="fab-tooltip">Simulador</span>
+    </button>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 4. BOTTOM SHEET FLOTANTE ERGONÓMICO (Panel del Teléfono) -->
+  <!-- ======================================================== -->
+  <section id="mobile-bottom-sheet" class="bottom-sheet collapsed">
+    
+    <!-- Manija táctil de arrastre / despliegue -->
+    <div class="sheet-handle-bar" id="sheet-handle">
+      <span class="sheet-pill-handle"></span>
+      <div class="sheet-drag-hint">
+        <span id="sheet-drag-title"><i class="fas fa-chevron-up"></i> Toca para ver telemetría completa</span>
+      </div>
     </div>
-  </nav>
 
-  <!-- Contenedor Principal -->
-  <main class="main-container">
+    <!-- CONTENIDO COMPACTO (Siempre visible para el pulgar) -->
+    <div class="sheet-main-bar">
+      <!-- Botón Principal Grande: Iniciar Transmisión GPS (1000ms) -->
+      <button id="btn-toggle-tracking" class="btn btn-transmit btn-large">
+        <i class="fas fa-satellite-dish"></i>
+        <span>Iniciar Transmisión GPS (1000ms)</span>
+      </button>
 
-    <!-- ======================================================== -->
-    <!-- VISTA 1: MODO EMISOR (Optimizado para teléfonos móviles) -->
-    <!-- ======================================================== -->
-    <section id="view-emitter" class="emitter-layout">
+      <!-- Chips de Telemetría Esencial -->
+      <div class="quick-telemetry-row">
+        <div class="quick-chip">
+          <span class="chip-label"><i class="fas fa-tachometer-alt"></i> Velocidad</span>
+          <span class="chip-value" id="quick-speed">0.0 km/h</span>
+        </div>
+        <div class="quick-chip">
+          <span class="chip-label"><i class="fas fa-bullseye"></i> Precisión</span>
+          <span class="chip-value" id="quick-accuracy">-- m</span>
+        </div>
+        <div class="quick-chip">
+          <span class="chip-label"><i class="fas fa-battery-half"></i> Batería</span>
+          <span class="chip-value" id="quick-battery">--%</span>
+        </div>
+        <div class="quick-chip">
+          <span class="chip-label"><i class="fas fa-cloud-upload-alt"></i> Pings</span>
+          <span class="chip-value" id="quick-pings">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENIDO EXPANDIBLE (Telemetría Detallada y Ajustes Rápidos) -->
+    <div class="sheet-expanded-content">
       
-      <!-- Panel de Control de Transmisión -->
-      <div class="card control-box">
-        <div class="card-header">
-          <div class="card-title">
-            <i class="fas fa-broadcast-tower" style="color: #00f2fe;"></i> Estado de Transmisión
-          </div>
-          <span id="emitter-status-badge" class="badge badge-offline">○ Detenido</span>
-        </div>
-
-        <div class="device-input-group">
-          <label for="emitter-device-id"><i class="fas fa-tag"></i> ID de Dispositivo Transmisor:</label>
-          <input type="text" id="emitter-device-id" class="input-text" placeholder="Ej: Movil-GPS-1001">
-        </div>
-
-        <button id="btn-toggle-tracking" class="btn btn-primary btn-large">
-          <i class="fas fa-satellite-dish"></i> Iniciar Transmisión GPS (1000ms)
-        </button>
-
-        <div class="heartbeat-bar">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <span id="emitter-heartbeat" class="heartbeat-dot"></span>
-            <span>Ciclo de Envío: <strong>1000 ms</strong></span>
-          </div>
-          <div>
-            <span>Pings enviados: <strong id="ping-counter" style="color: #00f2fe;">0</strong></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Telemetría en Tiempo Real de Sensores Móviles -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <i class="fas fa-microchip" style="color: #10b981;"></i> Sensores del Celular (Telemetría)
-          </div>
-          <span style="font-size: 0.75rem; color: var(--text-muted);">
-            Actualizado: <span id="em-last-update">--:--:--</span>
-          </span>
-        </div>
-
-        <div class="telemetry-grid">
-          <div class="telemetry-card highlight">
-            <div class="tel-label"><i class="fas fa-map-pin"></i> Latitud</div>
-            <div id="em-lat" class="tel-value accent">--.------</div>
-          </div>
-          <div class="telemetry-card highlight">
-            <div class="tel-label"><i class="fas fa-map-pin"></i> Longitud</div>
-            <div id="em-lng" class="tel-value accent">--.------</div>
-          </div>
-          <div class="telemetry-card">
-            <div class="tel-label"><i class="fas fa-tachometer-alt"></i> Velocidad</div>
-            <div id="em-speed" class="tel-value">0.0 km/h</div>
-          </div>
-          <div class="telemetry-card">
-            <div class="tel-label"><i class="fas fa-bullseye"></i> Precisión GPS</div>
-            <div id="em-acc" class="tel-value">--</div>
-          </div>
-          <div class="telemetry-card">
-            <div class="tel-label"><i class="fas fa-mountain"></i> Altitud</div>
-            <div id="em-alt" class="tel-value">-- m</div>
-          </div>
-          <div class="telemetry-card">
-            <div class="tel-label"><i class="fas fa-compass"></i> Rumbo / Dirección</div>
-            <div id="em-heading" class="tel-value">--</div>
-          </div>
-          <div class="telemetry-card">
-            <div class="tel-label"><i class="fas fa-battery-half"></i> Batería Móvil</div>
-            <div id="em-battery" class="tel-value green">--</div>
-          </div>
-          <div class="telemetry-card">
-            <div class="tel-label"><i class="fas fa-sync-alt"></i> Giroscopio</div>
-            <div id="em-orientation" class="tel-value" style="font-size: 0.85rem;">--</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ======================================================== -->
-    <!-- VISTA 2: MODO MONITOR (Mapa y Centro de Monitoreo)       -->
-    <!-- ======================================================== -->
-    <section id="view-monitor" class="monitor-layout hidden">
-      
-      <!-- Columna Izquierda: Mapa Principal -->
-      <div class="map-column">
-        <!-- Barra de Controles del Mapa -->
-        <div class="map-controls-bar">
-          <div class="map-controls-left">
-            <input type="text" id="monitor-device-id" class="input-text" style="width: 170px;" placeholder="ID a Monitorear">
-            <button id="btn-connect-monitor" class="btn btn-secondary" title="Conectar a dispositivo">
-              <i class="fas fa-link"></i> Rastrear
-            </button>
-            <span id="monitor-status-badge" class="badge badge-success">● Conectado</span>
-          </div>
-
-          <div class="map-controls-right">
-            <select id="map-engine-select" class="select-input">
-              <option value="leaflet">OpenStreetMap (Leaflet)</option>
-              <option value="google">Google Maps API v3</option>
-            </select>
-            <button id="btn-auto-center" class="btn btn-secondary active" title="Alternar auto-centrado">
-              <i class="fas fa-crosshairs"></i> Centrar
-            </button>
-            <button id="btn-clear-trail" class="btn btn-secondary" title="Limpiar rastro">
-              <i class="fas fa-eraser"></i> Limpiar
-            </button>
-          </div>
-        </div>
-
-        <!-- Contenedor del Mapa -->
-        <div class="map-container">
-          <div id="map"></div>
-        </div>
-      </div>
-
-      <!-- Columna Derecha: Sidebar con Telemetría y Registro -->
-      <aside class="sidebar-column">
-        <!-- Tarjeta de Resumen en Vivo -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">
-              <i class="fas fa-satellite" style="color: #00f2fe;"></i> Telemetría en Vivo
-            </div>
-            <span id="mon-last-seen" style="font-size: 0.75rem; color: var(--text-muted);">--:--:--</span>
-          </div>
-
-          <div class="telemetry-grid">
-            <div class="telemetry-card highlight">
-              <div class="tel-label">Latitud</div>
-              <div id="mon-lat" class="tel-value accent">--.------</div>
-            </div>
-            <div class="telemetry-card highlight">
-              <div class="tel-label">Longitud</div>
-              <div id="mon-lng" class="tel-value accent">--.------</div>
-            </div>
-            <div class="telemetry-card">
-              <div class="tel-label"><i class="fas fa-tachometer-alt"></i> Velocidad</div>
-              <div id="mon-speed" class="tel-value green">0.0 km/h</div>
-            </div>
-            <div class="telemetry-card">
-              <div class="tel-label"><i class="fas fa-compass"></i> Rumbo</div>
-              <div id="mon-heading" class="tel-value">--</div>
-            </div>
-            <div class="telemetry-card">
-              <div class="tel-label"><i class="fas fa-route"></i> Recorrido</div>
-              <div id="mon-distance" class="tel-value">0 m</div>
-            </div>
-            <div class="telemetry-card">
-              <div class="tel-label"><i class="fas fa-bullseye"></i> Precisión</div>
-              <div id="mon-acc" class="tel-value">--</div>
-            </div>
-            <div class="telemetry-card">
-              <div class="tel-label"><i class="fas fa-mountain"></i> Altitud</div>
-              <div id="mon-alt" class="tel-value">--</div>
-            </div>
-            <div class="telemetry-card">
-              <div class="tel-label"><i class="fas fa-battery-half"></i> Batería</div>
-              <div id="mon-battery" class="tel-value">--</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Simulador de Pruebas -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">
-              <i class="fas fa-flask" style="color: #f59e0b;"></i> Modo Pruebas
-            </div>
-          </div>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
-            Genera movimiento y telemetría automática cada 1000ms para probar el mapa sin salir.
-          </p>
-          <button id="btn-toggle-sim" class="btn btn-secondary" style="width: 100%;">
-            <i class="fas fa-play"></i> Simular Movimiento GPS
+      <!-- Selector de Modo: Mi Dispositivo vs Monitorear Remoto -->
+      <div class="card sheet-card">
+        <div class="mode-segmented-control">
+          <button id="mode-btn-local" class="segment-btn active">
+            <i class="fas fa-mobile-alt"></i> Mi Celular (Transmitir)
+          </button>
+          <button id="mode-btn-remote" class="segment-btn">
+            <i class="fas fa-desktop"></i> Monitorear Otro Móvil
           </button>
         </div>
 
-        <!-- Tabla Histórica de Coordenadas Recibidas -->
-        <div class="card" style="flex: 1;">
-          <div class="card-header">
-            <div class="card-title">
-              <i class="fas fa-list-ol"></i> Últimos Puntos (Tiempo Real)
-            </div>
-          </div>
-          <div class="table-container">
-            <table class="telemetry-table">
-              <thead>
-                <tr>
-                  <th>Hora</th>
-                  <th>Coordenadas</th>
-                  <th>Vel.</th>
-                  <th>Prec.</th>
-                  <th>Bat.</th>
-                </tr>
-              </thead>
-              <tbody id="telemetry-table-body">
-                <!-- Se llena dinámicamente con los pings de Firestore -->
-              </tbody>
-            </table>
+        <div class="device-input-box">
+          <label for="active-device-id"><i class="fas fa-tag"></i> ID de Dispositivo:</label>
+          <div class="input-with-btn">
+            <input type="text" id="active-device-id" class="input-text" placeholder="Ej: Movil-GPS-1001">
+            <button id="btn-save-device-id" class="btn btn-secondary">
+              <i class="fas fa-check"></i>
+            </button>
           </div>
         </div>
-      </aside>
+      </div>
 
-    </section>
+      <!-- Cuadrícula Completa de Sensores del Teléfono -->
+      <div class="card sheet-card">
+        <div class="card-header">
+          <h3 class="card-title"><i class="fas fa-microchip" style="color: #10b981;"></i> Sensores del Teléfono</h3>
+          <span class="timestamp-badge" id="telemetry-timestamp">--:--:--</span>
+        </div>
 
-  </main>
+        <div class="sensor-grid">
+          <div class="sensor-item highlight">
+            <span class="sensor-name"><i class="fas fa-map-marker-alt"></i> Latitud</span>
+            <span class="sensor-val" id="det-lat">--.------</span>
+          </div>
+          <div class="sensor-item highlight">
+            <span class="sensor-name"><i class="fas fa-map-marker-alt"></i> Longitud</span>
+            <span class="sensor-val" id="det-lng">--.------</span>
+          </div>
+          <div class="sensor-item">
+            <span class="sensor-name"><i class="fas fa-mountain"></i> Altitud</span>
+            <span class="sensor-val" id="det-altitude">-- m</span>
+          </div>
+          <div class="sensor-item">
+            <span class="sensor-name"><i class="fas fa-compass"></i> Rumbo</span>
+            <span class="sensor-val" id="det-heading">--</span>
+          </div>
+          <div class="sensor-item">
+            <span class="sensor-name"><i class="fas fa-route"></i> Recorrido Total</span>
+            <span class="sensor-val" id="det-distance">0 m</span>
+          </div>
+          <div class="sensor-item">
+            <span class="sensor-name"><i class="fas fa-sync-alt"></i> Giroscopio</span>
+            <span class="sensor-val" id="det-orientation" style="font-size: 0.8rem;">--</span>
+          </div>
+        </div>
+      </div>
 
-  <!-- Modal de Configuración -->
+      <!-- Tabla de Últimos Puntos Transmitidos -->
+      <div class="card sheet-card">
+        <div class="card-header">
+          <h3 class="card-title"><i class="fas fa-history" style="color: #00f2fe;"></i> Últimos Puntos (1000ms)</h3>
+        </div>
+        <div class="table-responsive">
+          <table class="telemetry-table">
+            <thead>
+              <tr>
+                <th>Hora</th>
+                <th>Coordenadas</th>
+                <th>Velocidad</th>
+                <th>Precisión</th>
+              </tr>
+            </thead>
+            <tbody id="telemetry-table-body">
+              <!-- Rellenado dinámico en tiempo real -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ======================================================== -->
+  <!-- 5. MODAL DE AJUSTES (Firebase & Google Maps)             -->
+  <!-- ======================================================== -->
   <div id="settings-modal" class="modal-overlay hidden">
-    <div class="modal-content">
+    <div class="modal-content mobile-modal">
       <div class="modal-header">
-        <h2 style="font-size: 1.15rem; font-weight: 700;">
+        <h2 style="font-size: 1.1rem; font-weight: 700;">
           <i class="fas fa-sliders-h" style="color: #00f2fe;"></i> Configuración de APIs
         </h2>
-        <button id="btn-close-settings" class="btn btn-secondary btn-icon" style="border:none;">
+        <button id="btn-close-settings" class="mobile-icon-btn" aria-label="Cerrar">
           <i class="fas fa-times"></i>
         </button>
       </div>
@@ -298,8 +244,8 @@
           <div class="device-input-group">
             <label for="cfg-project-id"><i class="fab fa-google"></i> Firebase Project ID:</label>
             <input type="text" id="cfg-project-id" class="input-text" value="appmovil-67ee7">
-            <small style="color: var(--text-muted); font-size: 0.72rem;">
-              Proyecto en la consola: <a href="https://console.firebase.google.com/project/appmovil-67ee7/overview?hl=es-419" target="_blank" style="color: #00f2fe;">appmovil-67ee7</a>
+            <small class="hint-text">
+              Consola: <a href="https://console.firebase.google.com/project/appmovil-67ee7/overview?hl=es-419" target="_blank" rel="noopener noreferrer" style="color: #00f2fe;">appmovil-67ee7</a>
             </small>
           </div>
 
@@ -309,23 +255,28 @@
           </div>
 
           <div class="device-input-group">
-            <label for="cfg-google-maps-key"><i class="fas fa-map-marked"></i> Google Maps JavaScript API Key:</label>
-            <input type="text" id="cfg-google-maps-key" class="input-text" placeholder="AIzaSy... (Opcional si usas Leaflet)">
-            <small style="color: var(--text-muted); font-size: 0.72rem;">
-              Necesaria para renderizar con Google Maps API v3 con vista satelital y Street View.
-            </small>
+            <label for="cfg-google-maps-key"><i class="fas fa-map-marked-alt"></i> Google Maps JavaScript API Key:</label>
+            <input type="text" id="cfg-google-maps-key" class="input-text" placeholder="AIzaSy... (Opcional, Leaflet disponible)">
+          </div>
+
+          <div class="device-input-group">
+            <label for="cfg-engine-select"><i class="fas fa-layer-group"></i> Motor de Mapa:</label>
+            <select id="cfg-engine-select" class="select-input">
+              <option value="leaflet">OpenStreetMap (Leaflet - Sin API Key requerida)</option>
+              <option value="google">Google Maps JavaScript API v3</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">
-            <i class="fas fa-save"></i> Guardar Cambios
+          <button type="submit" class="btn btn-primary btn-large">
+            <i class="fas fa-save"></i> Guardar Ajustes
           </button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Contenedor de Toast Notificaciones -->
+  <!-- Contenedor de Alertas Toast -->
   <div id="toast-container"></div>
 
   <!-- Scripts de la Aplicación -->

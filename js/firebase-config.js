@@ -117,3 +117,4 @@ window.FirebaseManager = {
   getFirestoreDb,
   isConnectedToFirebase
 };
+

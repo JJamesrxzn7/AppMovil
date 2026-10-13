@@ -305,3 +305,4 @@ class GPSTracker {
 }
 
 window.GPSTracker = GPSTracker;
+

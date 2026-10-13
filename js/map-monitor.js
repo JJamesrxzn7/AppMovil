@@ -1,7 +1,8 @@
 /**
  * Módulo de Monitoreo en Tiempo Real sobre Mapa
- * Integra Google Maps JavaScript API con motor alternativo Leaflet (OpenStreetMap)
- * Escucha cambios en tiempo real desde Firebase Firestore (DaaS) vía onSnapshot
+ * Soporta Google Maps JavaScript API v3 y Leaflet (OpenStreetMap)
+ * Conexión en tiempo real con Firebase Firestore (DaaS) mediante onSnapshot
+ * Detección instantánea de ubicación actual al cargar la app
  */
 
 class MapMonitor {
@@ -17,7 +18,10 @@ class MapMonitor {
     this.pathCoordinates = [];
     this.autoCenter = true;
 
-    // Estado del rastreo en tiempo real
+    // Coordenadas actuales del usuario local
+    this.currentUserLocation = null;
+
+    // Dispositivo activo monitoreado
     this.activeDeviceId = localStorage.getItem(window.FirebaseManager.STORAGE_KEYS.ACTIVE_DEVICE_ID) || 'Movil-GPS-1001';
     this.firestoreUnsubscribe = null;
     this.totalDistanceMeters = 0;
@@ -25,11 +29,12 @@ class MapMonitor {
 
     this.callbacks = {
       onTelemetryReceived: null,
+      onUserLocated: null,
       onStatusChange: null
     };
   }
 
-  // Cambia el motor de mapa (Google Maps <-> Leaflet)
+  // Alterna entre motores de mapa (Google Maps <-> Leaflet)
   async setEngine(newEngine, apiKey = '') {
     this.engine = newEngine;
     if (apiKey) {
@@ -38,14 +43,22 @@ class MapMonitor {
     }
     localStorage.setItem(window.FirebaseManager.STORAGE_KEYS.MAP_ENGINE, newEngine);
     await this.initMap();
+    if (this.currentUserLocation) {
+      this.panToLocation(this.currentUserLocation.lat, this.currentUserLocation.lng, 17);
+      this.updateMarkerPosition(
+        this.currentUserLocation.lat,
+        this.currentUserLocation.lng,
+        this.currentUserLocation.heading || 0,
+        this.currentUserLocation.accuracy || 15
+      );
+    }
   }
 
-  // Inicializa el mapa según el motor seleccionado
+  // Inicializa el mapa
   async initMap() {
     const container = document.getElementById(this.containerId);
     if (!container) return;
 
-    // Limpiar contenedor
     container.innerHTML = '';
     this.pathCoordinates = [];
     this.totalDistanceMeters = 0;
@@ -55,6 +68,7 @@ class MapMonitor {
       try {
         await this.loadGoogleMapsSdk(this.googleMapsApiKey);
         this.initGoogleMap();
+        this.locateUserImmediately();
         return;
       } catch (err) {
         console.warn('Fallo al cargar Google Maps API, cambiando a Leaflet:', err);
@@ -62,11 +76,12 @@ class MapMonitor {
       }
     }
 
-    // Por defecto o respaldo: Leaflet (OpenStreetMap)
+    // Inicializar Leaflet (OpenStreetMap)
     this.initLeafletMap();
+    this.locateUserImmediately();
   }
 
-  // Carga asíncrona del script de Google Maps API
+  // Carga asíncrona de Google Maps SDK
   loadGoogleMapsSdk(apiKey) {
     return new Promise((resolve, reject) => {
       if (window.google && window.google.maps) {
@@ -83,56 +98,53 @@ class MapMonitor {
       script.async = true;
       script.defer = true;
       script.onload = () => resolve();
-      script.onerror = (e) => reject(new Error('No se pudo cargar Google Maps API. Verifica tu API Key.'));
+      script.onerror = () => reject(new Error('No se pudo cargar Google Maps API.'));
       document.head.appendChild(script);
     });
   }
 
-  // Inicialización de Google Maps
+  // Inicializa Google Maps
   initGoogleMap() {
-    const defaultCenter = { lat: 4.7110, lng: -74.0721 }; // Bogotá, Colombia por defecto
+    const defaultCenter = this.currentUserLocation || { lat: 4.7110, lng: -74.0721 };
     const mapOptions = {
       center: defaultCenter,
-      zoom: 16,
+      zoom: 17,
       mapTypeId: 'roadmap',
       gestureHandling: 'greedy',
-      zoomControl: true,
-      mapTypeControl: true,
-      streetViewControl: true,
-      fullscreenControl: true,
+      zoomControl: false, // Menos estorbo en pantallas táctiles móviles
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
       styles: [
-        { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
-        { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] },
-        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
-        { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
-        { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
-        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#746855' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] }
+        { elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#0f172a' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#334155' }] },
+        { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1e293b' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#475569' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0b1329' }] }
       ]
     };
 
     this.map = new google.maps.Map(document.getElementById(this.containerId), mapOptions);
 
-    // Polilínea de ruta en Google Maps
     this.polyline = new google.maps.Polyline({
       path: [],
       geodesic: true,
       strokeColor: '#00f2fe',
-      strokeOpacity: 0.9,
+      strokeOpacity: 0.95,
       strokeWeight: 5
     });
     this.polyline.setMap(this.map);
 
-    // Marcador de dispositivo con flecha de navegación
     this.marker = new google.maps.Marker({
       position: defaultCenter,
       map: this.map,
-      title: `Dispositivo: ${this.activeDeviceId}`,
+      title: 'Tu Ubicación Actual',
       icon: {
         path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        scale: 6,
-        fillColor: '#10b981',
+        scale: 7,
+        fillColor: '#00f2fe',
         fillOpacity: 1,
         strokeColor: '#ffffff',
         strokeWeight: 2,
@@ -140,41 +152,37 @@ class MapMonitor {
       }
     });
 
-    // Círculo de precisión
     this.accuracyCircle = new google.maps.Circle({
       map: this.map,
       radius: 0,
-      fillColor: '#10b981',
+      fillColor: '#00f2fe',
       fillOpacity: 0.15,
-      strokeColor: '#10b981',
-      strokeOpacity: 0.5,
+      strokeColor: '#00f2fe',
+      strokeOpacity: 0.6,
       strokeWeight: 1
     });
 
-    console.log('Google Maps API inicializado exitosamente');
     if (this.callbacks.onStatusChange) this.callbacks.onStatusChange('google', true);
   }
 
-  // Inicialización de Leaflet (OpenStreetMap / CartoDB Dark)
+  // Inicializa Leaflet Map
   initLeafletMap() {
-    if (typeof L === 'undefined') {
-      console.error('Librería Leaflet no cargada en el DOM');
-      return;
-    }
+    if (typeof L === 'undefined') return;
 
-    const defaultCenter = [4.7110, -74.0721];
+    const defaultCenter = this.currentUserLocation 
+      ? [this.currentUserLocation.lat, this.currentUserLocation.lng] 
+      : [4.7110, -74.0721];
+
     this.map = L.map(this.containerId, {
-      zoomControl: true,
-      attributionControl: true
-    }).setView(defaultCenter, 16);
+      zoomControl: false, // Controles limpios en móvil
+      attributionControl: false
+    }).setView(defaultCenter, 17);
 
-    // Capa de mapa base oscura moderna
+    // CartoDB Dark Matter / Voyager
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
       maxZoom: 19
     }).addTo(this.map);
 
-    // Polilínea de ruta
     this.polyline = L.polyline([], {
       color: '#00f2fe',
       weight: 5,
@@ -183,46 +191,82 @@ class MapMonitor {
       lineJoin: 'round'
     }).addTo(this.map);
 
-    // Marcador con pulso
-    const customIcon = L.divIcon({
-      className: 'custom-leaflet-marker',
+    // Marcador de radar pulsante de alta visibilidad para teléfono móvil
+    const mobileIcon = L.divIcon({
+      className: 'user-gps-pulse-marker',
       html: `
-        <div class="pulse-marker-wrapper">
-          <div class="pulse-radar"></div>
-          <div class="marker-pointer" id="leaflet-marker-arrow">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L19 21L12 17L5 21L12 2Z" fill="#10b981" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
-            </svg>
-          </div>
+        <div class="user-gps-radar-ring"></div>
+        <div class="user-gps-pointer" id="leaflet-marker-arrow">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L19 21L12 17L5 21L12 2Z" fill="#00f2fe" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+          </svg>
         </div>
       `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16]
+      iconSize: [38, 38],
+      iconAnchor: [19, 19]
     });
 
-    this.marker = L.marker(defaultCenter, { icon: customIcon }).addTo(this.map);
+    this.marker = L.marker(defaultCenter, { icon: mobileIcon }).addTo(this.map);
 
-    // Círculo de precisión
     this.accuracyCircle = L.circle(defaultCenter, {
       radius: 0,
-      color: '#10b981',
-      fillColor: '#10b981',
+      color: '#00f2fe',
+      fillColor: '#00f2fe',
       fillOpacity: 0.15,
       weight: 1
     }).addTo(this.map);
 
-    console.log('Leaflet Map (OpenStreetMap) inicializado exitosamente');
     if (this.callbacks.onStatusChange) this.callbacks.onStatusChange('leaflet', true);
   }
 
-  // Conectar escucha en tiempo real de Firebase Firestore (DaaS)
+  // Localiza instantáneamente al usuario al abrir la aplicación
+  locateUserImmediately() {
+    if (!('geolocation' in navigator)) {
+      console.warn('Geolocalización no soportada');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = pos.coords;
+        this.currentUserLocation = {
+          lat: coords.latitude,
+          lng: coords.longitude,
+          accuracy: coords.accuracy,
+          heading: coords.heading || 0
+        };
+
+        this.panToLocation(coords.latitude, coords.longitude, 17);
+        this.updateMarkerPosition(coords.latitude, coords.longitude, coords.heading || 0, coords.accuracy || 15);
+
+        if (this.callbacks.onUserLocated) {
+          this.callbacks.onUserLocated(coords);
+        }
+      },
+      (err) => {
+        console.warn('No se pudo obtener ubicación inicial automática:', err.message);
+      },
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+    );
+  }
+
+  // Centra la vista en la ubicación actual del usuario
+  centerOnUser() {
+    this.autoCenter = true;
+    if (this.currentUserLocation) {
+      this.panToLocation(this.currentUserLocation.lat, this.currentUserLocation.lng, 18);
+    } else {
+      this.locateUserImmediately();
+    }
+  }
+
+  // Escucha en tiempo real de Firestore (DaaS) mediante onSnapshot
   startRealtimeListener(deviceId) {
     if (deviceId) {
       this.activeDeviceId = deviceId;
       localStorage.setItem(window.FirebaseManager.STORAGE_KEYS.ACTIVE_DEVICE_ID, deviceId);
     }
 
-    // Cancelar suscripción previa si existe
     if (this.firestoreUnsubscribe) {
       this.firestoreUnsubscribe();
       this.firestoreUnsubscribe = null;
@@ -234,19 +278,13 @@ class MapMonitor {
       return false;
     }
 
-    console.log(`Iniciando escucha en tiempo real para dispositivo: ${this.activeDeviceId}`);
-
-    // Cargar historial previo de puntos para pintar ruta inicial
     this.loadHistoryPoints(this.activeDeviceId);
 
-    // Escucha en tiempo real del documento del dispositivo mediante onSnapshot
     this.firestoreUnsubscribe = db.collection('dispositivos').doc(this.activeDeviceId)
       .onSnapshot((docSnapshot) => {
         if (docSnapshot.exists) {
           const data = docSnapshot.data();
           this.handleRealtimeData(data);
-        } else {
-          console.log(`Documento de dispositivo ${this.activeDeviceId} aún no creado en Firestore.`);
         }
       }, (error) => {
         console.error('Error en onSnapshot de Firestore:', error);
@@ -259,11 +297,9 @@ class MapMonitor {
     if (this.firestoreUnsubscribe) {
       this.firestoreUnsubscribe();
       this.firestoreUnsubscribe = null;
-      console.log('Escucha en tiempo real de Firestore detenida');
     }
   }
 
-  // Carga los últimos puntos de historial para rellenar la polilínea inicial
   async loadHistoryPoints(deviceId) {
     try {
       const db = window.FirebaseManager.getFirestoreDb();
@@ -285,11 +321,11 @@ class MapMonitor {
         this.renderPath();
       }
     } catch (e) {
-      console.warn('No se pudo cargar historial previo de Firestore:', e);
+      console.warn('Historial previo no disponible:', e);
     }
   }
 
-  // Procesa cada paquete de telemetría recibido desde Firebase en tiempo real
+  // Procesa cada punto que llega en tiempo real (cada 1000ms)
   handleRealtimeData(telemetry) {
     if (!telemetry || typeof telemetry.latitude !== 'number' || typeof telemetry.longitude !== 'number') {
       return;
@@ -300,30 +336,26 @@ class MapMonitor {
     const accuracy = telemetry.accuracy || 10;
     const heading = typeof telemetry.heading === 'number' ? telemetry.heading : 0;
 
-    // 1. Agregar punto a la polilínea y actualizar distancia recorrida
-    this.addPointToPath(lat, lng, true);
+    this.currentUserLocation = { lat, lng, accuracy, heading };
 
-    // 2. Mover marcador y actualizar rumbo
+    this.addPointToPath(lat, lng, true);
     this.updateMarkerPosition(lat, lng, heading, accuracy);
 
-    // 3. Centrar cámara si autoCenter está activo
     if (this.autoCenter && this.map) {
       this.panToLocation(lat, lng);
     }
 
-    // 4. Calcular métricas y disparar callback de UI
-    const enrichedData = {
+    const enriched = {
       ...telemetry,
       totalDistanceMeters: Math.round(this.totalDistanceMeters),
       totalPoints: this.pathCoordinates.length
     };
 
     if (this.callbacks.onTelemetryReceived) {
-      this.callbacks.onTelemetryReceived(enrichedData);
+      this.callbacks.onTelemetryReceived(enriched);
     }
   }
 
-  // Agrega punto y acumula distancia con la fórmula de Haversine
   addPointToPath(lat, lng, shouldRender = true) {
     const newCoord = { lat, lng };
 
@@ -332,7 +364,6 @@ class MapMonitor {
         this.lastCoordinate.lat, this.lastCoordinate.lng,
         lat, lng
       );
-      // Solo acumular si el desplazamiento es razonable (evitar ruido menor a 1m)
       if (deltaMeters > 0.5) {
         this.totalDistanceMeters += deltaMeters;
       }
@@ -346,7 +377,6 @@ class MapMonitor {
     }
   }
 
-  // Renderiza la polilínea según el motor activo
   renderPath() {
     if (!this.map || !this.polyline) return;
 
@@ -359,7 +389,6 @@ class MapMonitor {
     }
   }
 
-  // Actualiza la posición del marcador y el círculo de precisión
   updateMarkerPosition(lat, lng, heading, accuracy) {
     if (!this.map) return;
 
@@ -393,18 +422,22 @@ class MapMonitor {
     }
   }
 
-  // Centra suavemente el mapa en las coordenadas
-  panToLocation(lat, lng) {
+  panToLocation(lat, lng, zoomLevel = null) {
     if (!this.map) return;
 
     if (this.engine === 'google' && window.google) {
-      this.map.panTo(new google.maps.LatLng(lat, lng));
+      const gPos = new google.maps.LatLng(lat, lng);
+      this.map.panTo(gPos);
+      if (zoomLevel) this.map.setZoom(zoomLevel);
     } else if (this.engine === 'leaflet') {
-      this.map.panTo([lat, lng], { animate: true, duration: 0.5 });
+      if (zoomLevel) {
+        this.map.setView([lat, lng], zoomLevel, { animate: true, duration: 0.5 });
+      } else {
+        this.map.panTo([lat, lng], { animate: true, duration: 0.5 });
+      }
     }
   }
 
-  // Limpia el rastro de la ruta
   clearPath() {
     this.pathCoordinates = [];
     this.totalDistanceMeters = 0;
@@ -412,9 +445,8 @@ class MapMonitor {
     this.renderPath();
   }
 
-  // Cálculo de distancia geodésica (Haversine) en metros
   calculateHaversineDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Radio de la Tierra en metros
+    const R = 6371e3;
     const phi1 = (lat1 * Math.PI) / 180;
     const phi2 = (lat2 * Math.PI) / 180;
     const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;

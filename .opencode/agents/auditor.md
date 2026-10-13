@@ -19,3 +19,4 @@ Como agente auditor de OpenCode:
 3. Evalúa el renderizado en tiempo real sobre la API de Google Maps con marcadores, polilínea y círculo de precisión.
 4. Audita la recolección de telemetría de sensores del teléfono celular (latitud, longitud, altitud, velocidad, rumbo, precisión, batería, orientación y red).
 5. Documenta las pruebas, recomendaciones y métricas de rendimiento en `AUDITORIA_OPENCODE.md`.
+
