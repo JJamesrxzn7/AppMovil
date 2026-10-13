@@ -22,6 +22,9 @@ En respuesta a la auditoría de experiencia de usuario en dispositivos móviles 
    - La aplicación detecta automáticamente la posición GPS del usuario en el instante en que se abre la página (`locateUserImmediately()`), centrando el mapa sobre su ubicación física con nivel de zoom callejero (17-18).
    - Marcador interactivo de radar pulsante de alta visibilidad que muestra en vivo la posición del usuario.
    - Botón flotante dedicado **🎯 "Mi Ubicación"** (`#btn-locate-me`) para regresar y centrar la cámara en cualquier momento con un solo toque.
+3. **Capa Oficial de Calles Google Maps (Sin Marcas de Agua ni Bloqueos):**
+   - Se reemplazó el proveedor de teselas que requería clave comercial por **Google Maps Roadmap oficial** (`mt{s}.google.com/vt/lyrs=m`), mostrando todas las calles, avenidas, nombres y comercios reales de Google Maps de forma directa y nítida.
+   - Botón de alternancia rápida entre **Google Calles**, **Google Satélite Híbrido**, **ESRI** y **Google Terreno**.
 
 ---
 
