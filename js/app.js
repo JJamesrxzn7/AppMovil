@@ -96,16 +96,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     showToast('Centrado en tu ubicación GPS', 'info');
   });
 
-  // Alternar Motor de Mapa (Google Maps <-> OpenStreetMap Leaflet)
+  // Alternar Estilo de Mapa (Google Calles, Google Satélite Híbrido, ESRI)
   btnToggleEngine.addEventListener('click', async () => {
-    const nextEngine = monitor.engine === 'leaflet' ? 'google' : 'leaflet';
-    if (nextEngine === 'google' && !monitor.googleMapsApiKey) {
-      showToast('Ingresa tu clave de Google Maps en Ajustes (⚙️)', 'warning');
-      openSettings();
-      return;
+    if (monitor.engine === 'leaflet') {
+      const styleName = monitor.cycleTileStyle();
+      if (styleName) {
+        showToast(`🗺️ Capa de mapa: ${styleName}`, 'info');
+      }
+    } else {
+      await monitor.setEngine('leaflet');
+      showToast('🗺️ Capa: Google Maps (Calles y Avenidas)', 'info');
     }
-    await monitor.setEngine(nextEngine);
-    showToast(`Mapa cambiado a: ${nextEngine === 'google' ? 'Google Maps API v3' : 'OpenStreetMap'}`, 'info');
   });
 
   // Limpiar Rastro

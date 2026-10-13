@@ -178,10 +178,31 @@ class MapMonitor {
       attributionControl: false
     }).setView(defaultCenter, 17);
 
-    // CartoDB Dark Matter / Voyager
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19
-    }).addTo(this.map);
+    // Capas reales con calles completas (estilo Google Maps sin marcas de agua)
+    this.tileLayers = {
+      google_streets: L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3'],
+        attribution: '&copy; Google Maps'
+      }),
+      google_hybrid: L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3'],
+        attribution: '&copy; Google Maps'
+      }),
+      google_terrain: L.tileLayer('https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3'],
+        attribution: '&copy; Google Maps'
+      }),
+      esri_streets: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: '&copy; Esri &mdash; Street Map'
+      })
+    };
+
+    this.currentTileStyle = 'google_streets';
+    this.activeTileLayer = this.tileLayers[this.currentTileStyle].addTo(this.map);
 
     this.polyline = L.polyline([], {
       color: '#00f2fe',
@@ -217,6 +238,33 @@ class MapMonitor {
     }).addTo(this.map);
 
     if (this.callbacks.onStatusChange) this.callbacks.onStatusChange('leaflet', true);
+  }
+
+  // Alterna entre estilos de mapa en vivo (Calles Google, Satélite Google, ESRI, Terreno)
+  cycleTileStyle() {
+    if (this.engine !== 'leaflet' || !this.map || !this.tileLayers) return null;
+
+    const styles = ['google_streets', 'google_hybrid', 'esri_streets', 'google_terrain'];
+    const names = {
+      google_streets: 'Google Maps (Calles y Avenidas)',
+      google_hybrid: 'Google Maps (Satélite Híbrido)',
+      esri_streets: 'ESRI (Mapa Urbano)',
+      google_terrain: 'Google Maps (Terreno / Relieve)'
+    };
+
+    const currentIdx = Math.max(0, styles.indexOf(this.currentTileStyle));
+    const nextIdx = (currentIdx + 1) % styles.length;
+    const nextStyle = styles[nextIdx];
+
+    if (this.activeTileLayer) {
+      this.map.removeLayer(this.activeTileLayer);
+    }
+
+    this.currentTileStyle = nextStyle;
+    this.activeTileLayer = this.tileLayers[nextStyle].addTo(this.map);
+    this.activeTileLayer.bringToBack();
+
+    return names[nextStyle];
   }
 
   // Localiza instantáneamente al usuario al abrir la aplicación
