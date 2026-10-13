@@ -1,118 +1,79 @@
-# 🛰️ GeoLive Telemetry - Rastreo GPS en Tiempo Real con Firebase Firestore y Google Maps
+# 📱 GeoLive App - Cliente Móvil de Transmisión GPS en Tiempo Real
 
-Aplicación web móvil de alta frecuencia para telemetría y geolocalización en tiempo real. Captura el sensor GPS y sensores de hardware del smartphone, transmite a la base de datos en la nube **Firebase Firestore (DaaS)** cada **1000 milisegundos (1 segundo)** y renderiza en vivo el movimiento del dispositivo sobre **Google Maps API v3** y **OpenStreetMap (Leaflet)**.
+Aplicación web móvil progresiva (PWA) de alta frecuencia diseñada para que el **usuario común comparta su ubicación satelital GPS y telemetría de sensores en tiempo real** hacia la nube **Firebase Firestore (DaaS)** cada **1000 milisegundos (1 segundo)**.
+
+Esta aplicación es el **Cliente Transmisor**, pensada para operar en conjunto con el repositorio de monitoreo y control de flotas: [AppMovilAdmin](https://github.com/JJamesrxzn7/AppMovilAdmin).
 
 ---
 
-## 📋 Características Principales
+## 🎯 Enfoque del Usuario Común (Experiencia Limpia)
+El usuario común no necesita paneles de monitoreo complejos ni configuraciones técnicas. Su experiencia está optimizada en 3 pasos:
+1. **Abrir la app en su teléfono móvil:** Se localiza automáticamente en el mapa de Google Maps con todas sus calles y avenidas.
+2. **Ingresar su Nombre o Alias:** (ej: *"Juan"*, *"Pana Carlos"*, *"Moto 1"*).
+3. **Presionar "Iniciar Transmisión GPS (1000ms)":** Sus coordenadas, velocidad, rumbo y estado de batería se transmiten de inmediato cada segundo a Cloud Firestore.
 
-### 📱 1. Captura de Sensores Móviles (Modo Emisor)
-* **GPS de Alta Precisión:** Utiliza la API nativa `navigator.geolocation.watchPosition` con `{ enableHighAccuracy: true, timeout: 4500, maximumAge: 0 }`.
-* **Frecuencia de Actualización Estricta:** Envío programado de telemetría cada **1000 milisegundos (1 segundo)**.
-* **Telemetría Completa de Sensores:**
-  * **Latitud y Longitud:** Con precisión micrométrica (hasta 6 decimales).
+---
+
+## 📋 Características Técnicas
+
+### 📱 1. Captura de Hardware Satelital Móvil
+* **Geolocalización Satelital de Alta Precisión:** Utiliza `navigator.geolocation.watchPosition` con `{ enableHighAccuracy: true, timeout: 4500, maximumAge: 0 }`.
+* **Frecuencia Estricta de 1000 ms:** Temporizador periódico sincronizado que transmite a la nube segundo a segundo ($1000\text{ ms}$).
+* **Telemetría Completa:**
+  * **Latitud y Longitud:** Con precisión de 6 decimales.
   * **Precisión:** Radio de incertidumbre en metros ($\pm \text{m}$).
   * **Velocidad:** En $\text{m/s}$ y convertida a $\text{km/h}$.
-  * **Altitud:** Metros sobre el nivel del mar y precisión vertical.
-  * **Rumbo / Dirección:** Grados (0°–360°) y punto cardinal (Norte, Sur, Este, Oeste, etc.).
-  * **Batería:** Porcentaje de carga y estado de carga activa (vía `Battery Status API`).
-  * **Giroscopio / Orientación:** Ángulos $\alpha$, $\beta$ y $\gamma$ del dispositivo (`DeviceOrientationEvent`).
-  * **Estado de Conexión:** Detección de conectividad online/offline.
-* **Screen Wake Lock:** Mantiene la pantalla encendida para evitar que el sistema operativo del teléfono suspenda la antena GPS durante desplazamientos.
+  * **Altitud:** Metros sobre el nivel del mar.
+  * **Rumbo / Dirección:** Brújula en grados ($0^\circ–360^\circ$) y puntos cardinales (N, S, E, O).
+  * **Batería del Teléfono:** Nivel % y estado de carga activa (`Battery Status API`).
+  * **Giroscopio / Orientación:** Ángulos $\alpha$, $\beta$, $\gamma$ (`DeviceOrientationEvent`).
+* **Screen Wake Lock:** Impide que el teléfono apague la pantalla y suspenda el chip GPS mientras el usuario se desplaza.
 
-### ☁️ 2. Base de Datos en la Nube (Firebase Firestore DaaS)
-* **Proyecto Vinculado:** [`appmovil-67ee7`](https://console.firebase.google.com/project/appmovil-67ee7/overview?hl=es-419)
-* **Colección `dispositivos`:** Mantiene el estado en vivo de cada móvil conectado.
-* **Subcolección `historial`:** Almacena la secuencia de puntos de coordenadas para dibujar la trayectoria.
-* **Escucha en Tiempo Real:** Utiliza el listener reactivo `onSnapshot` de Firestore para propagar cambios instantáneamente sin necesidad de recargar la página.
+### 📶 2. Tolerancia a Fallos y Modo Offline (Cero Pérdida de Datos)
+* **Cola de Almacenamiento Local:** Si el teléfono pierde cobertura, entra a un túnel o se activa el modo avión, **ningún punto se pierde**. Cada coordenada de 1000ms se almacena en memoria persistente (`localStorage`).
+* **Sincronización Automática al Reconectar:** Cuando se restablece la conexión a internet, la app sube automáticamente todos los puntos acumulados en bloques a Cloud Firestore.
+* **Progresividad PWA:** Service Worker (`sw.js`) y Manifiesto (`manifest.json`) que permiten abrir la app sin conexión e instalarla en la pantalla de inicio del celular.
 
-### 🗺️ 3. Visualización en Tiempo Real (Modo Monitor)
-* **Google Maps API v3:**
-  * Marcador de navegación con rotación dinámica según el rumbo (`heading`).
-  * Polilínea geodésica continua que traza el camino recorrido en tiempo real.
-  * Círculo de radio de precisión de señal GPS alrededor del vehículo o peatón.
-  * Auto-centrado suave de cámara y controles de Street View / Satélite.
-* **Motor Alternativo Leaflet (OpenStreetMap):** Permite ejecutar y probar la visualización de forma inmediata sin necesidad de configurar una tarjeta de crédito o clave de Google Cloud Console.
-
-### 🧪 4. Modo Simulador de Movimiento
-* Permite probar la aplicación en la computadora de escritorio sin salir a la calle, simulando cambios de posición, velocidad, rumbo y batería cada 1000ms.
+### ☁️ 3. Integración con Cloud Firestore (DaaS)
+* **Proyecto Firebase:** [`appmovil-67ee7`](https://console.firebase.google.com/project/appmovil-67ee7/overview?hl=es-419)
+* **Colección `dispositivos/{deviceId}`:** Mantiene el estado en vivo del usuario con campos como `deviceName`, `latitude`, `longitude`, `speedKmH`, `batteryLevel`, etc.
+* **Subcolección `historial`:** Guarda el trazado de puntos segundo a segundo para que el panel de administración pueda dibujar la ruta recorrida.
 
 ---
 
-## 📂 Estructura del Proyecto
+## 📂 Estructura Limpia del Proyecto
 
 ```plaintext
 DesarrolloDePlataformas/
-├── index.html                   # Interfaz dual (Emisor GPS / Monitor en Mapa)
+├── index.html                   # Interfaz móvil limpia del usuario común
 ├── css/
-│   └── style.css                # Estilos modernos Cyber-Glassmorphism responsivos
+│   └── style.css                # Estilos responsivos Mobile-First con Bottom Sheet
 ├── js/
-│   ├── firebase-config.js       # Conexión y persistencia con Firebase Firestore
-│   ├── gps-tracker.js           # Motor de captura de sensores móviles (1000ms)
-│   ├── map-monitor.js           # Motor de mapas (Google Maps API + Leaflet) y onSnapshot
-│   └── app.js                   # Orquestador de la UI, eventos y simulador
-├── opencode.json                # Configuración del agente auditor OpenCode
-├── .opencode/
-│   └── agents/
-│       └── auditor.md           # Definición de auditoría de OpenCode
+│   ├── firebase-config.js       # Conexión y credenciales de Firebase Firestore
+│   ├── gps-tracker.js           # Captura GPS (1000ms), sensores y cola offline
+│   ├── map-monitor.js           # Visualización del mapa Google Maps local
+│   └── app.js                   # Controlador mobile-first del transmisor
+├── icons/
+│   └── icon.svg                 # Ícono vectorial de la app PWA
+├── manifest.json                # Manifiesto para instalación nativa en smartphones
+├── sw.js                        # Service Worker para funcionamiento sin conexión
 ├── firebase.rules               # Reglas de seguridad para Cloud Firestore
-├── AUDITORIA_OPENCODE.md        # Informe detallado de auditoría técnica por OpenCode
-├── .gitignore                   # Exclusión de binarios (opencode.exe) y temporales
-└── README.md                    # Documentación del proyecto
+├── AUDITORIA_OPENCODE.md        # Auditoría técnica realizada por OpenCode
+├── push-to-github.bat           # Script para subir cambios a GitHub en 1 clic
+└── README.md                    # Documentación del cliente móvil
 ```
 
 ---
 
-## 🚀 Guía de Puesta en Marcha
+## 🚀 Puesta en Marcha
 
-### 1. Requisitos Previos
-* Un navegador moderno (Chrome, Edge, Safari, Firefox).
-* Para capturar GPS real desde el teléfono, se requiere conexión HTTPS o localhost (política de seguridad de geolocalización de los navegadores móviles).
-
-### 2. Ejecutar Localmente
-Puedes servir los archivos con cualquier servidor HTTP local:
-```powershell
-# Con Python
-python -m http.server 8080
-
-# O con Node.js / npx
-npx serve -l 8080
-```
-Luego abre `http://localhost:8080` en tu navegador.
-
-### 3. Conexión con Firebase (`appmovil-67ee7`)
-1. Ve a la consola del proyecto: [appmovil-67ee7](https://console.firebase.google.com/project/appmovil-67ee7/overview?hl=es-419).
-2. En la sección **Cloud Firestore**, asegúrate de que la base de datos esté creada (Modo de prueba o usando las reglas de `firebase.rules`).
-3. En la configuración del proyecto (ícono de engranaje ⚙️) -> **General** -> **Tus apps**, registra una aplicación Web y copia tu `apiKey`.
-4. En la aplicación web, abre el ícono de **Ajustes (⚙️)** en la esquina superior derecha y pega tu `Firebase Web API Key`.
-
-### 4. Configuración de Google Maps API
-1. En Google Cloud Console, habilita la API **Maps JavaScript API**.
-2. Copia tu clave API de Google Maps.
-3. En la aplicación, ingresa a **Ajustes (⚙️)**, pega tu clave en el campo `Google Maps JavaScript API Key` y selecciona el motor `Google Maps API v3`.
-*(Nota: Si no posees una clave de Google Maps, puedes usar la opción predeterminada OpenStreetMap / Leaflet que funciona inmediatamente).*
-
----
-
-## 🔒 Reglas de Seguridad de Cloud Firestore (`firebase.rules`)
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /dispositivos/{deviceId} {
-      allow read, write: if true;
-      
-      match /historial/{puntos} {
-        allow read, write: if true;
-      }
-    }
-  }
-}
-```
-
----
-
-## 🧑‍💻 Auditoría Técnica con OpenCode
-El proyecto incluye la suite de auditoría técnica realizada mediante el agente **OpenCode**, documentada íntegramente en [`AUDITORIA_OPENCODE.md`](file:///c:/Users/estudiante/Desktop/DesarrolloDePlataformas/AUDITORIA_OPENCODE.md).
-
+1. Abre el proyecto con cualquier servidor local:
+   ```powershell
+   npx serve -l 8080
+   # o
+   python -m http.server 8080
+   ```
+2. Abre `http://localhost:8080` o la IP de tu red local en tu celular (ej. `http://192.168.1.X:8080`).
+3. Ingresa tu nombre o alias.
+4. Presiona **"Iniciar Transmisión GPS (1000ms)"**.
+5. Para monitorear a los usuarios conectados, se utilizará el repositorio administrativo: [AppMovilAdmin](https://github.com/JJamesrxzn7/AppMovilAdmin).

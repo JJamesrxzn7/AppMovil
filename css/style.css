@@ -288,7 +288,7 @@ html, body {
 }
 
 .bottom-sheet.collapsed {
-  transform: translateY(calc(100% - 170px));
+  transform: translateY(calc(100% - 225px));
 }
 
 .bottom-sheet.expanded {
@@ -329,7 +329,19 @@ html, body {
   padding: 0 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+.user-identity-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-identity-box label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .btn-transmit {

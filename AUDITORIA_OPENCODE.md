@@ -24,7 +24,11 @@ En respuesta a la auditoría de experiencia de usuario en dispositivos móviles 
    - Botón flotante dedicado **🎯 "Mi Ubicación"** (`#btn-locate-me`) para regresar y centrar la cámara en cualquier momento con un solo toque.
 3. **Capa Oficial de Calles Google Maps (Sin Marcas de Agua ni Bloqueos):**
    - Se reemplazó el proveedor de teselas que requería clave comercial por **Google Maps Roadmap oficial** (`mt{s}.google.com/vt/lyrs=m`), mostrando todas las calles, avenidas, nombres y comercios reales de Google Maps de forma directa y nítida.
-   - Botón de alternancia rápida entre **Google Calles**, **Google Satélite Híbrido**, **ESRI** y **Google Terreno**.
+   - Botón de alternancia rápida entre **Google Calles**, **Google Satélite Híbrido** y **Google Terreno**.
+4. **Separación de Responsabilidades y Simplificación para Usuario Común:**
+   - Este repositorio (`AppMovil`) queda **exclusiva y limpiamente enfocado en el usuario final / transmisor móvil**.
+   - Se eliminaron todas las complejidades de monitoreo y dashboards multi-dispositivo de este repositorio, delegándolas a la aplicación compañera especializada: [`AppMovilAdmin`](https://github.com/JJamesrxzn7/AppMovilAdmin).
+   - El usuario común únicamente ingresa su Nombre/Alias, activa el botón de transmisión ($1000\text{ ms}$) y visualiza su posición.
 
 ---
 
