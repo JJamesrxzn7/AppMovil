@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Permite lectura y escritura en la colección de dispositivos para rastreo GPS en tiempo real
+    // Proyecto: appmovil-67ee7
+    match /dispositivos/{deviceId} {
+      allow read, write: if true;
+      
+      // Subcolección de puntos de historial de telemetría (1000ms)
+      match /historial/{puntos} {
+        allow read, write: if true;
+      }
+    }
+    
+    // Regla de respaldo para cualquier otra colección del proyecto
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

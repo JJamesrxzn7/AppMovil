@@ -1,0 +1,28 @@
+# Binarios y ejecutables
+opencode.exe
+*.exe
+*.zip
+*.tar.gz
+
+# Dependencias y entornos
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Credenciales y variables locales
+.env
+.env.local
+.env.*.local
+*.private.json
